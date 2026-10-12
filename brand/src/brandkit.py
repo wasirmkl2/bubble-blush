@@ -80,3 +80,4 @@ BROWN_SUGAR = "#A87E5A"  # boba pearl brown
 SAGE = "#8F9C8B"         # supporting sage
 CREAM = "#F9F4EF"        # paper
 WHITE = "#FFFFFF"
+GOLD = "#C2A05A"        # muted gold, the collar in the original logo

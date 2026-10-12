@@ -79,8 +79,8 @@ def stacked(mark_kw, font, wt, text, tr, cap=96, mark_h=520, gap=104,
     ch = pad + mark_h + gap + cap + pad
     mkw = dict(mark_kw)
     mkw.setdefault("ink", ink)          # the mark must follow the lockup ink
-    body = place(mark.build(paper=paper, **mkw), cw / 2, pad + mark_h / 2,
-                 mark_h)
+    mkw.setdefault("paper", paper)
+    body = place(mark.build(**mkw), cw / 2, pad + mark_h / 2, mark_h)
     body += (f'\n<g transform="translate({(cw - tw) / 2:.2f},'
              f'{pad + mark_h + gap + cap:.2f})"><path d="{d}" fill="{ink}"/></g>')
     return body, cw, ch
@@ -96,8 +96,8 @@ def horizontal(mark_kw, font, wt, text, tr, cap=82, mark_h=300, gap=56,
     ch = pad + mark_h + pad
     mkw = dict(mark_kw)
     mkw.setdefault("ink", ink)          # the mark must follow the lockup ink
-    body = place(mark.build(paper=paper, **mkw), pad + mw / 2,
-                 pad + mark_h / 2, mark_h)
+    mkw.setdefault("paper", paper)
+    body = place(mark.build(**mkw), pad + mw / 2, pad + mark_h / 2, mark_h)
     body += (f'\n<g transform="translate({pad + mw + gap:.2f},'
              f'{pad + mark_h / 2 + cap / 2:.2f})">'
              f'<path d="{d}" fill="{ink}"/></g>')

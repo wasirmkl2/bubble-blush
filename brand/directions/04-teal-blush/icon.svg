@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="474.0" height="828.0" viewBox="0 0 474.0 828.0">
+<g transform="translate(-246.0,-50.0)">
+    <path d="M 318.0 506.0 H 498.0 A 150.0 150.0 0 0 1 498.0 806.0 H 318.0 Z" fill="#F9DCDA"/>
+    <path d="M 424.0 650.0 L 424.0 506.0" stroke="#3F797E" stroke-width="44.0" fill="none" stroke-linecap="round"/>
+    <circle cx="400" cy="726" r="38" fill="#A87E5A"/>
+    <circle cx="492" cy="735" r="34" fill="#A87E5A"/>
+    <circle cx="560" cy="705" r="30" fill="#A87E5A"/>
+    <path d="M 318.0 506.0 H 498.0 A 150.0 150.0 0 0 1 498.0 806.0 H 318.0" stroke="#3F797E" stroke-width="52.0" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 318.0 232.0 H 478.0 A 137.0 137.0 0 0 1 478.0 506.0 H 318.0" stroke="#3F797E" stroke-width="52.0" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 318.0 232.0 V 806.0" stroke="#3F797E" stroke-width="52.0" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 424.0 506.0 L 424.0 118.0" stroke="#3F797E" stroke-width="44.0" fill="none" stroke-linecap="round"/>
+    <path d="M 402.0 180.0 L 446.0 180.0" stroke="#F2B8B5" stroke-width="30" fill="none" stroke-linecap="butt"/>
+</g>
+</svg>
