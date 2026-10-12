@@ -37,7 +37,7 @@ for name, mkw, ink, pad in [
 ]:
     body, w, h = stacked(mkw, QS, 600, "BUBBLE BLUSH", 0.10, cap=92,
                          mark_h=600, pad=pad, ink=ink)
-    emit(name, body, w, h, (2400, 1200, 600))
+    emit(name, body, w, h, (2000, 1200, 600))
 
 for name, mkw, ink in [
     ("logo/horizontal", A_MARK, INK),
@@ -46,18 +46,18 @@ for name, mkw, ink in [
 ]:
     body, w, h = horizontal(mkw, QS, 600, "BUBBLE BLUSH", 0.10, cap=92,
                             mark_h=340, pad=36, ink=ink)
-    emit(name, body, w, h, (2400, 1200, 600))
+    emit(name, body, w, h, (2000, 1200, 600))
 
 # reversed, on ink -- needs a background to sit on
 body, w, h = stacked(dict(pearl=BLUSH, liquid="#35696E", show_ring=False), QS, 600,
                      "BUBBLE BLUSH", 0.10, cap=92, mark_h=600, pad=70,
                      ink=CREAM, paper=INK_DEEP)
-emit("logo/stacked-reversed", body, w, h, (2400, 1200), bg=INK_DEEP)
+emit("logo/stacked-reversed", body, w, h, (2000, 1200), bg=INK_DEEP)
 
 body, w, h = horizontal(dict(pearl=BLUSH, liquid="#35696E", show_ring=False), QS, 600,
                         "BUBBLE BLUSH", 0.10, cap=92, mark_h=340, pad=60,
                         ink=CREAM, paper=INK_DEEP)
-emit("logo/horizontal-reversed", body, w, h, (2400, 1200), bg=INK_DEEP)
+emit("logo/horizontal-reversed", body, w, h, (2000, 1200), bg=INK_DEEP)
 
 # ---- icon only ----------------------------------------------------------
 BBX, BBY, BBW, BBH = 292.0, 96.0, 382.0, 736.0

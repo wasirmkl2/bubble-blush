@@ -1,0 +1,8 @@
+# Fonts are fetched by brand/src/fetch-fonts.sh, not committed.
+# They are only needed to regenerate artwork; all shipped .svg files
+# already have their type converted to outlines.
+brand/src/fonts/
+
+__pycache__/
+*.pyc
+.DS_Store

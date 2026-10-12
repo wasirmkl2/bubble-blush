@@ -2,9 +2,11 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = "/projects/sandbox/bubble-blush/brand/directions"
-OUT = "/projects/sandbox/bubble-blush/brand/options/11-SIX-DIRECTIONS-FINAL.png"
-FONT = "/projects/sandbox/_build/fonts/Quicksand-var.ttf"
+BRAND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT = os.path.join(BRAND, "directions")
+OUT = os.path.join(BRAND, "options", "11-SIX-DIRECTIONS-FINAL.png")
+FONT = os.path.join(BRAND, "src", "fonts", "Quicksand-var.ttf")
+MAX_PX = 2000          # no raster in this repo exceeds this on either edge
 
 DIRS = ["01-refined", "02-brown-sugar", "03-tilted-straw",
         "04-teal-blush", "05-signage-solid", "06-minimal"]
@@ -21,12 +23,13 @@ COLS = [("stacked-800.png", "standard"),
         ("stacked-onecolour-800.png", "one colour"),
         ("horizontal-800.png", "horizontal")]
 
-CELL_W, CELL_H = 430, 330
-LABEL_W = 400
+CELL_W, CELL_H = 380, 290
+LABEL_W = 360
 PAD = 30
 HEAD = 190
 W = LABEL_W + len(COLS) * CELL_W + PAD * 2
 H = HEAD + len(DIRS) * CELL_H + PAD
+assert max(W, H) <= MAX_PX, f"sheet {W}x{H} exceeds the {MAX_PX} px cap"
 
 CREAM = (249, 244, 239)
 INK = (63, 121, 126)

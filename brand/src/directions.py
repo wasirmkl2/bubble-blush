@@ -128,7 +128,7 @@ for d in DIRECTIONS:
         pad = 70 if bg else 40
         body, w, h = stacked(mkw, QS, WT, TEXT, TRACK, cap=92, mark_h=600,
                              pad=pad, ink=ink, paper=paper)
-        emit(os.path.join(out, name), body, w, h, (2400, 800), bg=bg)
+        emit(os.path.join(out, name), body, w, h, (2000, 800), bg=bg)
 
     for name, mkw, ink, paper, bg in [
         ("horizontal", base, INK, CREAM, None),
@@ -139,7 +139,7 @@ for d in DIRECTIONS:
         pad = 60 if bg else 36
         body, w, h = horizontal(mkw, QS, WT, TEXT, TRACK, cap=92, mark_h=340,
                                 pad=pad, ink=ink, paper=paper)
-        emit(os.path.join(out, name), body, w, h, (2400, 800), bg=bg)
+        emit(os.path.join(out, name), body, w, h, (2000, 800), bg=bg)
 
     # --- icons
     b, w, h = icon_body(**base)

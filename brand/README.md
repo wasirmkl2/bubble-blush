@@ -11,6 +11,13 @@ needs to be installed anywhere for these files to print correctly. Hand the
 
 ## Start here
 
+**[`FINAL-3/`](FINAL-3/) — the shortlist. Pick one of three.**
+Six directions were built out; three are worth choosing between. The folder
+holds the three complete packs, ranked, with the reasoning for each and for
+the three that were cut. Open
+**[`FINAL-3/00-PICK-ONE.png`](FINAL-3/00-PICK-ONE.png)** first.
+
+If you want to see all six anyway:
 **[`options/11-SIX-DIRECTIONS-FINAL.png`](options/11-SIX-DIRECTIONS-FINAL.png)**
 — all six finished logos in one view, each shown standard, reversed,
 one-colour and horizontal. Every cell in that sheet is a real exported file,
@@ -55,9 +62,15 @@ Each folder under `directions/` is a complete, usable set — 48 files.
 | `icon-onecolour`, `icon-reversed` | Single ink, and cream on deep ink |
 | `avatar-square` | Instagram and Facebook profile pictures |
 
-Lockups come as `.svg` plus PNG at 2400 and 800 px. Icons come as `.svg` plus
+Lockups come as `.svg` plus PNG at 2000 and 800 px. Icons come as `.svg` plus
 PNG from 512 down to 32 px. PNGs are transparent except the reversed and
 avatar files, which carry their background.
+
+**Every raster in this repository is capped at 2000 px on its longest edge**,
+because some tools and web viewers reject images larger than that. Nothing is
+lost: the `.svg` files are the print masters and have no resolution limit, and
+2000 px is still around 170 dpi across a 300 mm signboard. Print anything
+bigger from the vector.
 
 ---
 
@@ -132,6 +145,7 @@ python3 finalize.py    # wordmarks, lockups, palette
 python3 mockups.py     # in-use sheet
 python3 directions.py  # all six production packs
 python3 verify.py      # rebuild the overview from the real exports
+python3 final3.py      # the FINAL-3 shortlist, and the 2000 px cap
 ```
 
 `src/fontmatch.py` prints the stem-width measurements behind the type choice.
