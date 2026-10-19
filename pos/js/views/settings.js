@@ -47,6 +47,9 @@ Views.settings = (() => {
               <button class="btn sm ghost" id="sPrRefresh" type="button">↻ Refresh</button></div></div>
             <div><label>Paper width</label><select data-k="paperWidth" data-num><option value="58" ${s.paperWidth != 80 ? 'selected' : ''}>58 mm (e.g. Rongta RP58)</option><option value="80" ${s.paperWidth == 80 ? 'selected' : ''}>80 mm</option></select></div>
             <div><label>Text size (px)</label><input type="number" data-k="receiptFontPx" data-num min="9" max="16" value="${s.receiptFontPx}"></div>
+            <div class="span2"><label>Kitchen copy</label><select data-k="kitchenMode">
+              <option value="manual" ${s.kitchenMode !== 'auto' ? 'selected' : ''}>Wait: I tear off the customer bill, then press Print (no auto-cutter)</option>
+              <option value="auto" ${s.kitchenMode === 'auto' ? 'selected' : ''}>Print automatically right after the bill (printer has an auto-cutter)</option></select></div>
             <div><label>Image mode (direct)</label><select data-k="imageMode">
               <option value="raster" ${s.imageMode !== 'compat' ? 'selected' : ''}>Standard (fast)</option>
               <option value="compat" ${s.imageMode === 'compat' ? 'selected' : ''}>Compatibility: use if bill prints strange symbols</option></select></div>

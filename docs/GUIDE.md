@@ -63,7 +63,7 @@ With the **fast print** shortcut, stickers skip the print window and go to the *
 - Check the low-stock banner. Prepare pearls for the day.
 
 **During service**
-- Every order prints the **customer bill** and then a **kitchen copy**: big order number, each drink with size, sugar, ice, toppings and notes, and no prices. Tear the kitchen copy off for whoever makes the drinks. Untick either one in the payment window if you don't need it. Reprint from **Orders → open order → Kitchen copy**.
+- Every order prints the **customer bill** first. The POS then waits: **tear off the bill**, then press **Enter** (or *Print kitchen copy*) to print the **kitchen copy**. The kitchen copy has a big order number, each drink with size, sugar, ice, toppings and notes, and no prices. If you skip it, print it later with the gold **👩‍🍳 Print** button in the "Making now" bar. Orders → open order → *Kitchen copy* reprints it. If you ever buy a printer with an auto-cutter, go to Settings → Kitchen copy → *Print automatically*.
 - `F2` Sell · `/` search · `Enter` add · `F12` charge · `Esc` close.
 - Ask for the **phone number** at every order. It builds your customer list and the loyalty count (free drink every 10 cups by default).
 - Press **Ready ✓** in the "Making now" bar when a drink is handed over.

@@ -396,10 +396,37 @@ Views.pos = (() => {
       App.banners();
       showDone(order);
       if (printPrefs.receipt) await Print.receipt(order);
-      if (printPrefs.kitchen) await Print.kitchen(order);
       if (printPrefs.sticker && st().stickersEnabled) await Print.stickers(order);
+      if (printPrefs.kitchen) {
+        // No auto-cutter: wait until the customer bill is torn off.
+        if (printPrefs.receipt && st().kitchenMode !== 'auto') kitchenPrompt(order);
+        else await printKitchen(order);
+      }
       return true;
     }
+  }
+
+  async function printKitchen(order) {
+    await Print.kitchen(order, { reprint: !!order.kitchenAt });
+    await Store.markKitchenPrinted(order);
+    renderQueue();
+  }
+
+  function kitchenPrompt(order) {
+    const md = U.modal({
+      title: `Order #${order.no} · kitchen copy`,
+      body: `<div class="kprompt">
+          <div class="kp-step">✂️ Tear off the <b>customer bill</b> first.</div>
+          <div class="kp-step">Then print the <b>kitchen copy</b> for #${order.no} (${order.cups} cup${order.cups === 1 ? '' : 's'}).</div>
+          <p class="muted small">Press <b>Enter</b> to print · <b>Esc</b> to skip (you can print it later from the “Making now” bar).</p>
+        </div>`,
+      actions: [
+        { label: 'Skip' },
+        { label: '👩‍🍳 Print kitchen copy', cls: 'primary big', onClick: () => { printKitchen(order); } },
+      ],
+      onClose: () => renderQueue(),
+    });
+    setTimeout(() => md.el.querySelector('.modal-actions .primary')?.focus(), 50);
   }
 
   function showDone(order) {
@@ -422,9 +449,16 @@ Views.pos = (() => {
     box.innerHTML = `<span class="q-title">Making now</span>${pending.map((o) => `
       <div class="q-chip" title="${U.esc(o.lines.map((l) => `${l.qty}× ${l.name}`).join(', '))}">
         <b>#${o.no}</b><span>${o.cups} cup${o.cups === 1 ? '' : 's'}${o.customerName ? ' · ' + U.esc(o.customerName) : ''}</span>
+        <button class="btn sm ${o.kitchenAt ? 'ghost' : 'gold'}" data-kitchen="${o.id}" title="${o.kitchenAt ? 'Reprint kitchen copy' : 'Kitchen copy not printed yet: print it'}">👩‍🍳${o.kitchenAt ? '' : ' Print'}</button>
         <button class="btn sm primary" data-ready="${o.id}">Ready ✓</button>
       </div>`).join('')}`;
     box.onclick = async (e) => {
+      const k = e.target.closest('[data-kitchen]');
+      if (k) {
+        k.disabled = true;
+        await printKitchen(pending.find((x) => x.id === k.dataset.kitchen));
+        return;
+      }
       const b = e.target.closest('[data-ready]');
       if (!b) return;
       const o = pending.find((x) => x.id === b.dataset.ready);

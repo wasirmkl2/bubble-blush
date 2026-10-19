@@ -230,6 +230,12 @@ const Store = (() => {
       return order;
     },
 
+    async markKitchenPrinted(order) {
+      order.kitchenAt = new Date().toISOString();
+      await DB.put('orders', order);
+      api.changed('orders');
+    },
+
     async setReady(order, ready = true) {
       order.ready = ready;
       order.readyAt = ready ? new Date().toISOString() : null;

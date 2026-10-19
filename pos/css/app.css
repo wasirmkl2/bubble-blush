@@ -299,3 +299,7 @@ label.check input { width: 18px; height: 18px; accent-color: var(--teal-dd); }
   .settings { grid-template-columns: 1fr; }
 }
 .helper-box { background: var(--mist); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+
+.btn.gold { background: var(--gold); border-color: var(--gold); color: #fff; }
+.kprompt .kp-step { font-size: 17px; margin-bottom: 10px; }
+.kprompt .kp-step b { color: var(--teal-dd); }

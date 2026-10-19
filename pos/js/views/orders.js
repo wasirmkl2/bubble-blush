@@ -96,7 +96,7 @@ Views.orders = (() => {
         ...(o.status !== 'void' ? [{ label: 'Void order', cls: 'danger', left: true, onClick: () => voidFlow(o) }] : []),
         ...(o.status !== 'void' ? [{ label: o.ready ? 'Mark making' : 'Mark served', onClick: async () => { await Store.setReady(o, !o.ready); draw(); } }] : []),
         ...(Store.settings.stickersEnabled ? [{ label: '🏷 All stickers', onClick: () => { Print.stickers(o); return false; } }] : []),
-        { label: '👩‍🍳 Kitchen copy', onClick: () => { Print.kitchen(o, { reprint: true }); return false; } },
+        { label: '👩‍🍳 Kitchen copy', onClick: async () => { await Print.kitchen(o, { reprint: !!o.kitchenAt }); await Store.markKitchenPrinted(o); return false; } },
         { label: '🧾 Reprint bill', cls: 'primary', onClick: () => { Print.receipt(o, { reprint: true }); return false; } },
       ],
     });

@@ -31,6 +31,7 @@ const Seed = (() => {
     printReceiptDefault: true,
     printStickerDefault: true,
     printKitchenDefault: true,  // second copy for the staff making the drinks
+    kitchenMode: 'manual',      // 'manual' = wait until the bill is torn off · 'auto' = print right after (auto-cutter)
     vatPct: 0,
     vatMode: 'exclusive',
     dayStartHour: 4,
