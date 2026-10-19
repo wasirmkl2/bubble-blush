@@ -12,6 +12,7 @@ const App = (() => {
   ];
   let current = null;
   let unlockedUntil = 0;
+  let helperOk = null; // null = not checked yet
   const UNLOCK_MS = 15 * 60 * 1000;
 
   function renderNav() {
@@ -95,6 +96,11 @@ const App = (() => {
       msgs.push(`<div class="banner info" data-k="launcher">💡 Tip: open the POS with <b>“Start Bubble Blush POS”</b> so your data always stays in the same safe place.
         <button class="btn sm ghost" data-close="launcher">Got it</button></div>`);
     }
+    if (st.printMode !== 'browser' && helperOk === false && !sessionStorage.getItem('hideHelper')) {
+      msgs.push(`<div class="banner low" data-k="helper">🖨 Print helper is not running, so bills will open the print window.
+        Close the POS and open it with the <b>Bubble Blush POS</b> desktop shortcut.
+        <button class="btn sm ghost" data-act="recheck">Check again</button><button class="btn sm ghost" data-close="helper">Hide</button></div>`);
+    }
     const last = st.lastBackupAt ? new Date(st.lastBackupAt).getTime() : 0;
     if (Date.now() - last > 24 * 3600 * 1000 && !sessionStorage.getItem('hideBackup')) {
       msgs.push(`<div class="banner warn" data-k="backup">💾 ${last ? 'Last backup was ' + U.fmtDateTime(st.lastBackupAt) : 'No backup yet'} — keep a copy of your sales data safe.
@@ -147,12 +153,13 @@ const App = (() => {
     U.$('#banner').addEventListener('click', (e) => {
       const c = e.target.closest('[data-close]');
       if (c) {
-        sessionStorage.setItem(c.dataset.close === 'backup' ? 'hideBackup' : 'hideLauncherTip', '1');
+        sessionStorage.setItem({ backup: 'hideBackup', helper: 'hideHelper' }[c.dataset.close] || 'hideLauncherTip', '1');
         banners();
       }
       const a = e.target.closest('[data-act]');
       if (a && a.dataset.act === 'backup') backupNow();
       if (a && a.dataset.act === 'inventory') go('inventory');
+      if (a && a.dataset.act === 'recheck') checkHelper();
     });
     U.$('#lockBtn').addEventListener('click', () => {
       if (Date.now() < unlockedUntil) {
@@ -181,6 +188,19 @@ const App = (() => {
     const start = location.hash.slice(1);
     const startNav = NAV.find((n) => n.id === start);
     go(startNav && !startNav.locked ? start : 'pos');
+    checkHelper();
+  }
+
+  /* Ask the print helper once at start-up (any Edge permission prompt appears now, not at the counter). */
+  async function checkHelper() {
+    if (Store.settings.printMode === 'browser') return;
+    helperOk = await Receipt.helper.status(10000);
+    if (!helperOk) {
+      // the helper may still be starting: try again shortly
+      await new Promise((r) => setTimeout(r, 4000));
+      helperOk = await Receipt.helper.status(6000);
+    }
+    banners();
   }
 
   return { boot, go, requirePin, backupNow, banners, get current() { return current; } };

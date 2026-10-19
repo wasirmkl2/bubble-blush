@@ -1,0 +1,378 @@
+'use strict';
+/*
+ * Bills and day reports for thermal receipt printers.
+ *
+ * A bill is described once as a list of simple "ops" (text, row, line, logo…) and
+ * then either:
+ *   - drawn to a canvas at the printer's real dot width and sent as ESC/POS raster
+ *     through the local print helper (DIRECT: exact length, no dialog, no blank tail), or
+ *   - turned into HTML for the normal browser print dialog (fallback).
+ */
+const Receipt = (() => {
+  const HELPER = 'http://127.0.0.1:17846';
+  const FONT = 'Arial, "Nirmala UI", "Segoe UI", "Noto Sans Bengali", sans-serif';
+
+  /* ---------- paper geometry ---------- */
+  function paper() {
+    const w = Number(Store.settings.paperWidth) === 80 ? 80 : 58;
+    // Print heads are narrower than the roll: 58 mm roll = 48 mm / 384 dots, 80 mm = 72 mm / 576 dots (203 dpi).
+    return w === 80 ? { roll: 80, mm: 72, dots: 576 } : { roll: 58, mm: 48, dots: 384 };
+  }
+
+  /* ---------- content ---------- */
+  function receiptOps(order, { reprint = false } = {}) {
+    const st = Store.settings;
+    const m = (n) => U.money(n);
+    const ops = [];
+    if (st.receiptLogo) ops.push({ t: 'img', src: st.logoData || LOGO_PRINT, w: 0.55 });
+    else ops.push({ t: 'text', s: st.shopName, a: 'c', b: true, z: 1.5 });
+    if (st.tagline) ops.push({ t: 'text', s: st.tagline, a: 'c', z: 0.9 });
+    if (st.address) ops.push({ t: 'text', s: st.address, a: 'c', z: 0.9 });
+    if (st.phone) ops.push({ t: 'text', s: st.phone, a: 'c', z: 0.9 });
+    if (st.bin) ops.push({ t: 'text', s: `BIN: ${st.bin}`, a: 'c', z: 0.9 });
+    if (reprint) ops.push({ t: 'tag', s: 'REPRINT' });
+    if (order.status === 'void') ops.push({ t: 'tag', s: 'VOID – NOT PAID' });
+    ops.push({ t: 'hr' });
+    ops.push({ t: 'text', s: `Order #${order.no}`, a: 'c', b: true, z: 1.7 });
+    ops.push({ t: 'text', s: order.orderType, a: 'c', b: true });
+    ops.push({ t: 'row', l: U.fmtDateTime(order.at), r: `${order.cups} cup${order.cups === 1 ? '' : 's'}`, z: 0.9 });
+    if (order.customerName || order.customerPhone) {
+      ops.push({ t: 'text', s: `Customer: ${[order.customerName, order.customerPhone].filter(Boolean).join(' ')}`, z: 0.9 });
+    }
+    ops.push({ t: 'hr' });
+    order.lines.forEach((l, i) => {
+      if (i) ops.push({ t: 'gap', h: 0.25 });
+      ops.push({ t: 'row', l: `${l.qty} × ${l.name} (${l.sizeName})`, r: m(l.basePrice * l.qty), b: true });
+      (l.toppings || []).forEach((tp) => ops.push({ t: 'row', l: `+ ${tp.name}`, r: m(tp.price * l.qty), z: 0.9, i: 1 }));
+      const opts = [l.sugar && `Sugar ${l.sugar}`, l.ice].filter(Boolean).join(' · ');
+      if (opts) ops.push({ t: 'text', s: opts, z: 0.9, i: 1 });
+      if (l.note) ops.push({ t: 'text', s: `Note: ${l.note}`, z: 0.9, i: 1 });
+    });
+    ops.push({ t: 'hr' });
+    ops.push({ t: 'row', l: 'Subtotal', r: m(order.subtotal) });
+    if (order.discount > 0) {
+      const d = order.discountInfo || {};
+      ops.push({ t: 'row', l: `Discount${d.type === 'pct' ? ` (${d.value}%)` : ''}${d.reason ? ' – ' + d.reason : ''}`, r: '-' + m(order.discount) });
+    }
+    if (order.vat > 0) ops.push({ t: 'row', l: `VAT ${order.vatPct}%${order.vatMode === 'inclusive' ? ' (included)' : ''}`, r: m(order.vat) });
+    ops.push({ t: 'row', l: 'TOTAL', r: m(order.total), b: true, z: 1.45 });
+    ops.push({ t: 'row', l: 'Paid by', r: order.payMethod });
+    if (order.payMethod === 'Cash') {
+      ops.push({ t: 'row', l: 'Cash received', r: m(order.received) });
+      ops.push({ t: 'row', l: 'Change', r: m(order.change) });
+    }
+    if (order.note) { ops.push({ t: 'hr' }); ops.push({ t: 'text', s: `Note: ${order.note}`, z: 0.9 }); }
+    ops.push({ t: 'hr' });
+    String(st.receiptFooter || '').split('\n').filter((x) => x.trim()).forEach((x) => ops.push({ t: 'text', s: x, a: 'c', z: 0.9 }));
+    if (st.social) ops.push({ t: 'text', s: st.social, a: 'c', b: true, z: 0.9 });
+    return ops;
+  }
+
+  function dayReportOps(r) {
+    const st = Store.settings;
+    const m = (n) => U.money(n);
+    const ops = [
+      { t: 'text', s: st.shopName, a: 'c', b: true, z: 1.4 },
+      { t: 'text', s: r.title, a: 'c', b: true },
+      { t: 'text', s: r.range, a: 'c' },
+      { t: 'text', s: `Printed ${U.fmtDateTime(new Date().toISOString())}`, a: 'c', z: 0.85 },
+      { t: 'hr' },
+      { t: 'row', l: 'Orders', r: String(r.orders) },
+      { t: 'row', l: 'Cups sold', r: String(r.cups) },
+      { t: 'row', l: 'Gross sales', r: m(r.gross) },
+      { t: 'row', l: 'Discounts', r: '-' + m(r.discount) },
+    ];
+    if (r.vat) ops.push({ t: 'row', l: 'VAT', r: m(r.vat) });
+    ops.push({ t: 'row', l: 'NET SALES', r: m(r.net), b: true, z: 1.3 });
+    if (r.voids) ops.push({ t: 'row', l: `Voided (${r.voids})`, r: m(r.voidValue) });
+    ops.push({ t: 'hr' }, { t: 'text', s: 'Payments', b: true });
+    r.payments.forEach((p) => ops.push({ t: 'row', l: `${p.method} (${p.count})`, r: m(p.amount) }));
+    ops.push({ t: 'hr' }, { t: 'text', s: 'Cash drawer', b: true });
+    ops.push({ t: 'row', l: 'Opening cash', r: m(r.openingCash || 0) });
+    ops.push({ t: 'row', l: '+ Cash sales', r: m(r.cashSales) });
+    ops.push({ t: 'row', l: '− Cash expenses', r: m(r.cashExpenses) });
+    ops.push({ t: 'row', l: 'Expected in drawer', r: m(r.expectedCash), b: true });
+    if (r.countedCash !== null && r.countedCash !== undefined) {
+      ops.push({ t: 'row', l: 'Counted', r: m(r.countedCash) });
+      ops.push({ t: 'row', l: 'Difference', r: m(r.countedCash - r.expectedCash), b: true });
+    }
+    ops.push({ t: 'hr' }, { t: 'text', s: 'Profit (estimate)', b: true });
+    ops.push({ t: 'row', l: 'Ingredient cost', r: m(r.cogs) });
+    ops.push({ t: 'row', l: 'Gross profit', r: m(r.grossProfit), b: true });
+    ops.push({ t: 'row', l: 'Expenses', r: m(r.expenses) });
+    ops.push({ t: 'row', l: 'Net profit', r: m(r.netProfit), b: true });
+    ops.push({ t: 'hr' }, { t: 'text', s: 'Top items', b: true });
+    r.topItems.slice(0, 10).forEach((i) => ops.push({ t: 'row', l: `${i.qty} × ${i.name}`, r: m(i.sales) }));
+    if (r.note) ops.push({ t: 'hr' }, { t: 'text', s: `Note: ${r.note}` });
+    ops.push({ t: 'hr' }, { t: 'gap', h: 1 }, { t: 'text', s: 'Signature: ______________', a: 'c' });
+    return ops;
+  }
+
+  /* ---------- canvas renderer (for direct printing) ---------- */
+  const loadImg = (src) => new Promise((res) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => res(null);
+    img.src = src;
+  });
+
+  function wrap(ctx, text, maxW) {
+    const out = [];
+    String(text).split('\n').forEach((para) => {
+      let line = '';
+      para.split(/(\s+)/).forEach((word) => {
+        if (!word) return;
+        const test = line + word;
+        if (ctx.measureText(test).width <= maxW || !line.trim()) {
+          // a single word longer than the line: break it by characters
+          if (ctx.measureText(test).width > maxW && !line.trim()) {
+            let chunk = '';
+            for (const ch of word) {
+              if (ctx.measureText(chunk + ch).width > maxW && chunk) { out.push(chunk); chunk = ''; }
+              chunk += ch;
+            }
+            line = chunk;
+          } else line = test;
+        } else {
+          out.push(line.trimEnd());
+          line = word.trimStart();
+        }
+      });
+      out.push(line.trimEnd());
+    });
+    return out;
+  }
+
+  async function renderCanvas(ops, dots) {
+    const st = Store.settings;
+    const base = Math.round((dots / 384) * 22 * ((Number(st.receiptFontPx) || 12) / 12));
+    const lh = 1.28;
+    const indent = Math.round(base * 0.9);
+    const imgs = await Promise.all(ops.map((o) => (o.t === 'img' ? loadImg(o.src) : null)));
+    const scratch = document.createElement('canvas').getContext('2d');
+    const font = (o) => `${o.b ? 'bold ' : ''}${Math.round(base * (o.z || 1))}px ${FONT}`;
+    // small side margin: some print heads clip the outermost dots
+    const pad = Math.round(dots * 0.02);
+    const inner = dots - pad * 2;
+
+    // pass 1: layout
+    const items = [];
+    let y = 4;
+    ops.forEach((o, k) => {
+      const size = Math.round(base * (o.z || 1));
+      const x0 = pad + (o.i || 0) * indent;
+      if (o.t === 'img') {
+        const img = imgs[k];
+        if (!img) return;
+        const w = Math.round(inner * (o.w || 0.6));
+        const h = Math.round(img.naturalHeight * w / img.naturalWidth);
+        items.push({ t: 'img', img, x: Math.round((dots - w) / 2), y, w, h });
+        y += h + Math.round(base * 0.4);
+      } else if (o.t === 'text') {
+        scratch.font = font(o);
+        wrap(scratch, o.s, dots - pad - x0).forEach((line) => {
+          items.push({ t: 'text', s: line, font: font(o), a: o.a, x0, y, size });
+          y += Math.round(size * lh);
+        });
+      } else if (o.t === 'row') {
+        scratch.font = font(o);
+        const rw = scratch.measureText(o.r).width;
+        const lines = wrap(scratch, o.l, dots - pad - x0 - rw - base * 0.6);
+        lines.forEach((line, n) => {
+          items.push({ t: 'text', s: line, font: font(o), a: 'l', x0, y, size });
+          if (n === 0) items.push({ t: 'text', s: o.r, font: font(o), a: 'r', x0, y, size });
+          y += Math.round(size * lh);
+        });
+      } else if (o.t === 'hr') {
+        y += Math.round(base * 0.35);
+        items.push({ t: 'hr', y });
+        y += Math.round(base * 0.5);
+      } else if (o.t === 'gap') {
+        y += Math.round(base * (o.h || 0.5));
+      } else if (o.t === 'tag') {
+        const f = `bold ${base}px ${FONT}`;
+        scratch.font = f;
+        const w = scratch.measureText(o.s).width + base;
+        y += 4;
+        items.push({ t: 'box', x: Math.round((dots - w) / 2), y, w: Math.round(w), h: Math.round(base * 1.45) });
+        items.push({ t: 'text', s: o.s, font: f, a: 'c', x0: 0, y: y + Math.round(base * 0.12), size: base });
+        y += Math.round(base * 1.45) + 6;
+      }
+    });
+    const height = Math.max(8, Math.ceil(y + 4));
+
+    // pass 2: draw
+    const cv = document.createElement('canvas');
+    cv.width = dots;
+    cv.height = height;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, dots, height);
+    ctx.fillStyle = '#000';
+    ctx.strokeStyle = '#000';
+    ctx.textBaseline = 'top';
+    items.forEach((it) => {
+      if (it.t === 'img') ctx.drawImage(it.img, it.x, it.y, it.w, it.h);
+      else if (it.t === 'hr') {
+        for (let x = pad; x < dots - pad; x += 10) ctx.fillRect(x, it.y, Math.min(6, dots - pad - x), 2);
+      } else if (it.t === 'box') {
+        ctx.lineWidth = 3;
+        ctx.strokeRect(it.x + 1.5, it.y + 1.5, it.w - 3, it.h - 3);
+      } else {
+        ctx.font = it.font;
+        if (it.a === 'c') { ctx.textAlign = 'center'; ctx.fillText(it.s, dots / 2, it.y); }
+        else if (it.a === 'r') { ctx.textAlign = 'right'; ctx.fillText(it.s, dots - pad, it.y); }
+        else { ctx.textAlign = 'left'; ctx.fillText(it.s, it.x0, it.y); }
+      }
+    });
+    return cv;
+  }
+
+  /* ---------- ESC/POS ---------- */
+  function escpos(canvas, { feed = 4, cut = false, drawer = false, mode = 'raster' } = {}) {
+    const W = canvas.width;
+    const H = canvas.height;
+    const bpr = Math.ceil(W / 8);
+    const px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
+    const black = (x, y) => {
+      const i = (y * W + x) * 4;
+      return px[i + 3] > 127 && 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2] < 150;
+    };
+    const out = [];
+    const push = (...b) => b.forEach((x) => out.push(x & 0xff));
+    push(0x1b, 0x40); // initialise
+    if (drawer) push(0x1b, 0x70, 0x00, 0x19, 0xfa);
+    if (mode === 'compat') {
+      // ESC * 33: 24-dot column images, supported by practically every ESC/POS printer
+      push(0x1b, 0x33, 24); // line spacing = 24 dots
+      for (let y0 = 0; y0 < H; y0 += 24) {
+        push(0x1b, 0x2a, 33, W & 0xff, W >> 8);
+        for (let x = 0; x < W; x++) {
+          for (let k = 0; k < 3; k++) {
+            let byte = 0;
+            for (let bit = 0; bit < 8; bit++) {
+              const y = y0 + k * 8 + bit;
+              if (y < H && black(x, y)) byte |= 0x80 >> bit;
+            }
+            out.push(byte);
+          }
+        }
+        push(0x0a);
+      }
+      push(0x1b, 0x32); // default line spacing
+    }
+    const BAND = 128; // small bands: cheap printers have small buffers
+    for (let y0 = 0; mode !== 'compat' && y0 < H; y0 += BAND) {
+      const rows = Math.min(BAND, H - y0);
+      push(0x1d, 0x76, 0x30, 0x00, bpr & 0xff, bpr >> 8, rows & 0xff, rows >> 8);
+      for (let y = y0; y < y0 + rows; y++) {
+        for (let bx = 0; bx < bpr; bx++) {
+          let byte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const x = bx * 8 + bit;
+            if (x < W && black(x, y)) byte |= 0x80 >> bit;
+          }
+          out.push(byte);
+        }
+      }
+    }
+    const n = Math.max(0, Math.min(10, Math.round(Number(feed) || 0)));
+    if (n) push(0x1b, 0x64, n); // feed n lines so the end clears the tear bar
+    if (cut) push(0x1d, 0x56, 0x42, 0x00); // feed & partial cut (ignored by printers without a cutter)
+    return new Uint8Array(out);
+  }
+
+  /* ---------- print helper client ---------- */
+  async function call(path, { method = 'GET', body = null, timeout = 3000 } = {}) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeout);
+    try {
+      const res = await fetch(HELPER + path, {
+        method, body, signal: ctl.signal, cache: 'no-store',
+        headers: body ? { 'Content-Type': 'text/plain' } : undefined,
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Print helper error');
+      return json;
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('Print helper did not answer');
+      if (e instanceof TypeError) throw new Error('Print helper is not running');
+      throw e;
+    } finally { clearTimeout(t); }
+  }
+
+  const helper = {
+    async status(timeout = 2500) {
+      try { await call('/health', { timeout }); return true; } catch { return false; }
+    },
+    printers: (timeout = 4000) => call('/printers', { timeout }),
+    async pickPrinter() {
+      const st = Store.settings;
+      if (st.receiptPrinter) return st.receiptPrinter;
+      const { printers, default: def } = await helper.printers();
+      const guess = printers.find((p) => /rp58|rp80|rongta|pos-?58|pos-?80|xprinter|thermal|receipt/i.test(p)) || def;
+      if (!guess) throw new Error('No printer found — choose one in Settings');
+      await Store.saveSettings({ receiptPrinter: guess });
+      return guess;
+    },
+    async send(bytes, doc) {
+      const printer = await helper.pickPrinter();
+      await call(`/print?printer=${encodeURIComponent(printer)}&doc=${encodeURIComponent(doc)}`, {
+        method: 'POST', body: new Blob([bytes], { type: 'text/plain' }), timeout: 20000,
+      });
+      return printer;
+    },
+  };
+
+  /* ---------- HTML renderer (browser print dialog fallback) ---------- */
+  function html(ops) {
+    const st = Store.settings;
+    const p = paper();
+    const fs = Math.max(9, Math.min(16, Number(st.receiptFontPx) || 12));
+    const e = U.esc;
+    const style = (o) => `font-size:${(o.z || 1).toFixed(2)}em;${o.b ? 'font-weight:700;' : ''}${o.i ? 'padding-left:3mm;' : ''}`;
+    const body = ops.map((o) => {
+      if (o.t === 'img') return `<img src="${o.src}" style="width:${Math.round(p.mm * (o.w || 0.6))}mm;margin:0 auto 1.5mm;display:block" alt="">`;
+      if (o.t === 'text') return `<div style="${style(o)}text-align:${o.a === 'c' ? 'center' : o.a === 'r' ? 'right' : 'left'}">${e(o.s)}</div>`;
+      if (o.t === 'row') return `<div class="row" style="${style(o)}"><span>${e(o.l)}</span><span>${e(o.r)}</span></div>`;
+      if (o.t === 'hr') return '<div class="hr"></div>';
+      if (o.t === 'gap') return `<div style="height:${o.h || 0.5}em"></div>`;
+      if (o.t === 'tag') return `<div style="text-align:center"><span class="tag">${e(o.s)}</span></div>`;
+      return '';
+    }).join('');
+    return `<!doctype html><html><head><meta charset="utf-8"><style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      html,body{background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{width:${p.mm}mm;font-family:${FONT};font-size:${fs}px;line-height:1.3}
+      #r{width:${p.mm}mm;padding:1mm 0 3mm}
+      .row{display:flex;justify-content:space-between;gap:2mm}.row span:last-child{white-space:nowrap}
+      .hr{border-top:1px dashed #000;margin:1.5mm 0}
+      .tag{display:inline-block;border:1.5px solid #000;padding:0 2mm;font-weight:700;margin-top:1mm}
+    </style></head><body><div id="r">${body}</div></body></html>`;
+  }
+
+  /* ---------- public ---------- */
+  async function print(ops, doc) {
+    const st = Store.settings;
+    const p = paper();
+    if (st.printMode !== 'browser') {
+      try {
+        const cv = await renderCanvas(ops, p.dots);
+        const bytes = escpos(cv, { feed: st.receiptFeed ?? 4, cut: !!st.receiptCut, drawer: !!st.openDrawer && doc !== 'Day report', mode: st.imageMode === 'compat' ? 'compat' : 'raster' });
+        await helper.send(bytes, doc);
+        return { ok: true, direct: true };
+      } catch (err) {
+        console.warn('Direct print failed', err);
+        U.toast(`Direct print failed (${err.message}). Using the print window instead.`, 'err', 6000);
+      }
+    }
+    await Print.run(html(ops), { paperWidthMm: p.mm, autoHeight: true });
+    return { ok: true, direct: false };
+  }
+
+  return {
+    paper, receiptOps, dayReportOps, renderCanvas, escpos, html, helper, print,
+    receipt: (order, opts) => print(receiptOps(order, opts), `Bill #${order.no}`),
+    dayReport: (r) => print(dayReportOps(r), 'Day report'),
+  };
+})();

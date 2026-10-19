@@ -14,7 +14,14 @@ const Seed = (() => {
     social: 'facebook.com/bubbleblush',
     bin: '',
     receiptFooter: 'Thank you for visiting Bubble Blush!\nTag us @bubbleblush & follow us for offers.',
-    paperWidth: 80,
+    paperWidth: 58,
+    printMode: 'direct',      // 'direct' = print helper (exact length, no dialog) · 'browser' = print window
+    receiptPrinter: '',       // Windows printer name for bills (auto-detected)
+    imageMode: 'raster',      // 'raster' (GS v 0) or 'compat' (ESC *) for older printers
+    receiptFeed: 4,           // blank lines after the bill so it clears the tear bar
+    receiptCut: false,        // send a cut command (only for printers with an auto-cutter)
+    openDrawer: false,        // kick a cash drawer connected to the bill printer
+    schema: 2,
     receiptLogo: true,
     receiptFontPx: 12,
     stickersEnabled: true,

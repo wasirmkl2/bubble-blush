@@ -4,31 +4,45 @@
 
 | Item | Recommended | Notes |
 |---|---|---|
-| Bill printer | 80 mm USB thermal printer (e.g. Xprinter XP-80 / XP-N160II, Rongta RP80) | Common in Khulna/Dhaka markets. 58 mm also works (set it in Settings). |
+| Bill printer | 58 mm or 80 mm USB thermal printer (e.g. Rongta RP58, Xprinter XP-58 / XP-80) | Set the paper width in Settings. |
 | Sticker printer (optional) | Thermal label printer with **50×30 mm** or 40×30 mm labels (e.g. Xprinter XP-365B / XP-420B) | Use *direct thermal* labels; no ink or ribbon needed. |
-| Cash drawer (optional) | RJ11 drawer that plugs into the bill printer | Turn on "open drawer" in the printer driver settings. |
+| Cash drawer (optional) | RJ11 drawer that plugs into the bill printer | Tick **Open cash drawer** in Settings. |
 
 ## 2. Printer setup (one time)
 
-1. Install each printer's Windows driver (from the CD or the maker's website). Print a Windows test page.
-2. **Label printer driver:** open *Printing Preferences* and set the paper/stock to your label size (e.g. 50 mm × 30 mm, gap 2 mm). Then run the printer's *calibrate* (usually: hold the feed button).
-3. In the POS, open **Settings** and set the bill paper width and sticker size. Click **Test print bill** and **Test print sticker**.
-4. In Edge's print window, choose **More settings** and set:
-   - **Paper size**: your roll (80 mm) or label (50×30 mm)
-   - **Margins**: None
-   - **Scale**: Default (100)
-   - **Headers and footers**: off
+### Bill printer (e.g. Rongta RP58, 58 mm)
 
-Edge remembers these settings for the next print.
+Bills print **directly** to the printer through a small *print helper* that starts with the POS. Because the POS sends the bill as raw printer commands, the paper stops right after the last line. You don't get a print window or a long blank feed, whatever paper size the Windows driver is set to.
 
-### Fast printing (no print window)
+1. Install the printer's Windows driver and print a Windows test page.
+2. Open the POS with the **Bubble Blush POS** desktop shortcut. The shortcut also starts the helper.
+3. **Settings → Bill (receipt) printer**:
+   - Printing method: **Direct to printer**. It should say "✓ Print helper is running".
+   - Bill printer: pick your printer, e.g. *RONGTA RP58 Printer*.
+   - Paper width: **58 mm**.
+   - Click **Save settings**, then **Test print bill**.
+4. If Edge asks to allow access to apps or devices on this computer, click **Allow**.
 
-`Bubble Blush POS (fast print)` prints straight to the **Windows default printer** with no dialog.
+**If something is wrong:**
 
-- Use it if you print **only bills** or **only stickers**, or if one printer does both.
-- If you use two printers (bill + sticker), use the normal shortcut and pick the printer in the print window. Edge pre-selects the one you used last.
-- Set the default printer here: Windows Settings → Bluetooth & devices → Printers → turn off "Let Windows manage my default printer" → choose the printer → *Set as default*.
-- Close every POS window before switching between normal and fast mode.
+| Problem | Fix |
+|---|---|
+| "Print helper is not running" | Close every POS window and open it again with the desktop shortcut. Still failing? Double-click `pos\helper\Run print helper (troubleshoot).bat` and photograph the error. |
+| Bill prints strange symbols or garbage | Settings → Image mode → **Compatibility** → Save → test again. |
+| Paper doesn't come out far enough to tear | Increase "Blank lines after bill" (e.g. 5–6). |
+| Text cut off at the edge | Check Paper width matches your roll (58 mm). |
+
+If you switch to the **Browser print window** method instead, the printer driver's paper size decides how far the paper feeds. Rongta's default long-roll size (58 × 3276 mm) feeds metres of blank paper, which is why Direct is the default.
+
+### Cup sticker printer (optional)
+
+Stickers use the Edge print window. Labels are a fixed size, so the length is never a problem.
+
+1. In the label printer's *Printing Preferences*, set the label size (e.g. 50 mm × 30 mm, gap 2 mm). Run its calibration (usually by holding the feed button).
+2. **Settings → Cup sticker printer**: set the same size and click **Test print sticker**.
+3. In Edge's print window choose the label printer. Under **More settings**, set Margins: None, Scale: Default, and Headers and footers: off. Edge remembers these settings.
+
+With the **fast print** shortcut, stickers skip the print window and go to the **Windows default printer**. Make the label printer the default; bills still go to the bill printer through the helper.
 
 ## 3. Before the real opening
 

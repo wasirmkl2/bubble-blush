@@ -38,8 +38,23 @@ Views.settings = (() => {
 
         <div class="card"><h3>🧾 Bill (receipt) printer</h3>
           <div class="form-grid">
-            <div><label>Paper width</label><select data-k="paperWidth" data-num><option value="80" ${s.paperWidth == 80 ? 'selected' : ''}>80 mm (most common)</option><option value="58" ${s.paperWidth == 58 ? 'selected' : ''}>58 mm (small)</option></select></div>
+            <div class="span2"><label>Printing method</label><select data-k="printMode">
+              <option value="direct" ${s.printMode !== 'browser' ? 'selected' : ''}>Direct to printer (recommended): exact length, no print window</option>
+              <option value="browser" ${s.printMode === 'browser' ? 'selected' : ''}>Browser print window</option></select></div>
+            <div class="span2 helper-box" id="sHelper"><span class="muted">Checking print helper…</span></div>
+            <div class="span2" id="sPrinterRow"><label>Bill printer</label>
+              <div class="tools"><select data-k="receiptPrinter" id="sPrinter" style="flex:1"><option value="${U.esc(s.receiptPrinter || '')}">${U.esc(s.receiptPrinter || 'Auto-detect')}</option></select>
+              <button class="btn sm ghost" id="sPrRefresh" type="button">↻ Refresh</button></div></div>
+            <div><label>Paper width</label><select data-k="paperWidth" data-num><option value="58" ${s.paperWidth != 80 ? 'selected' : ''}>58 mm (e.g. Rongta RP58)</option><option value="80" ${s.paperWidth == 80 ? 'selected' : ''}>80 mm</option></select></div>
             <div><label>Text size (px)</label><input type="number" data-k="receiptFontPx" data-num min="9" max="16" value="${s.receiptFontPx}"></div>
+            <div><label>Image mode (direct)</label><select data-k="imageMode">
+              <option value="raster" ${s.imageMode !== 'compat' ? 'selected' : ''}>Standard (fast)</option>
+              <option value="compat" ${s.imageMode === 'compat' ? 'selected' : ''}>Compatibility: use if bill prints strange symbols</option></select></div>
+            <div><label>Blank lines after bill (direct)</label><input type="number" data-k="receiptFeed" data-num min="0" max="10" value="${s.receiptFeed ?? 4}"></div>
+            <div class="checks" style="align-items:flex-end">
+              <label class="check"><input type="checkbox" data-k="receiptCut" ${s.receiptCut ? 'checked' : ''}> Auto-cut paper</label>
+              <label class="check"><input type="checkbox" data-k="openDrawer" ${s.openDrawer ? 'checked' : ''}> Open cash drawer</label>
+            </div>
             <div class="span2"><label>Bill footer message</label><textarea data-k="receiptFooter" rows="2">${U.esc(s.receiptFooter)}</textarea></div>
             <div class="span2 checks">
               <label class="check"><input type="checkbox" data-k="receiptLogo" ${s.receiptLogo ? 'checked' : ''}> Print logo on bill</label>
@@ -115,8 +130,15 @@ Views.settings = (() => {
       U.toast('Bill logo updated');
     };
     U.$('#sLogoReset', el).onclick = async () => { await Store.saveSettings({ logoData: '' }); U.$('#sLogoPrev', el).src = LOGO_PRINT; };
-    U.$('#sTestR', el).onclick = async () => { await save(true); Print.receipt(sampleOrder()); };
-    U.$('#sTestS', el).onclick = async () => { await save(true); Print.stickers(sampleOrder()); };
+    U.$('#sTestR', el).onclick = async () => {
+      if (!(await save(true))) return;
+      const r = await Print.receipt(sampleOrder());
+      if (r && r.direct) U.toast(`Test bill sent to ${Store.settings.receiptPrinter}`);
+    };
+    U.$('#sPrRefresh', el).onclick = () => checkHelper(el);
+    U.$('[data-k="printMode"]', el).onchange = () => checkHelper(el);
+    checkHelper(el);
+    U.$('#sTestS', el).onclick = async () => { if (await save(true)) Print.stickers(sampleOrder()); };
     U.$('#sPin', el).onclick = setPin;
     const off = U.$('#sPinOff', el);
     if (off) off.onclick = async () => {
@@ -147,6 +169,30 @@ Views.settings = (() => {
     }
   }
 
+  async function checkHelper(el) {
+    const box = U.$('#sHelper', el);
+    const sel = U.$('#sPrinter', el);
+    const direct = U.$('[data-k="printMode"]', el).value !== 'browser';
+    U.$('#sPrinterRow', el).hidden = !direct;
+    if (!direct) {
+      box.innerHTML = `<span class="muted">Bills print through the Edge print window. If the paper keeps feeding after the bill, switch back to <b>Direct</b>.</span>`;
+      return;
+    }
+    box.innerHTML = '<span class="muted">Checking print helper…</span>';
+    try {
+      const { printers, default: def } = await Receipt.helper.printers(6000);
+      const cur = Store.settings.receiptPrinter;
+      const guess = cur || printers.find((p) => /rp58|rp80|rongta|pos-?58|pos-?80|xprinter|thermal|receipt/i.test(p)) || def || '';
+      sel.innerHTML = printers.map((p) => `<option value="${U.esc(p)}" ${p === guess ? 'selected' : ''}>${U.esc(p)}${p === def ? ' (Windows default)' : ''}</option>`).join('')
+        || '<option value="">No printers found</option>';
+      if (cur && !printers.includes(cur)) sel.insertAdjacentHTML('afterbegin', `<option value="${U.esc(cur)}" selected>${U.esc(cur)} (not found!)</option>`);
+      box.innerHTML = `<span class="good-text">✓ Print helper is running</span> <span class="muted">· ${printers.length} printer${printers.length === 1 ? '' : 's'} found. Pick your bill printer, then <b>Save</b> and <b>Test print bill</b>.</span>`;
+    } catch (err) {
+      box.innerHTML = `<span class="err">✗ Print helper is not running.</span> <span class="muted">Close the POS and open it again with the <b>Bubble Blush POS</b> desktop shortcut
+        (or <b>Start Bubble Blush POS.bat</b>). If Edge asks to allow access to local devices or apps, click <b>Allow</b>. Until then bills use the print window.</span>`;
+    }
+  }
+
   async function save(silent = false) {
     const patch = {};
     U.$$('[data-k]', root).forEach((inp) => {
@@ -159,14 +205,16 @@ Views.settings = (() => {
       patch[k] = v;
     });
     for (const k of ['orderTypes', 'payMethods', 'sugarLevels', 'iceLevels']) {
-      if (!patch[k].length) { U.toast(`“${k}” cannot be empty`, 'err'); return; }
+      if (!patch[k].length) { U.toast(`“${k}” cannot be empty`, 'err'); return false; }
     }
     if (!patch.sugarLevels.includes(patch.defaultSugar)) patch.defaultSugar = patch.sugarLevels[patch.sugarLevels.length - 1];
     if (!patch.iceLevels.includes(patch.defaultIce)) patch.defaultIce = patch.iceLevels[Math.min(2, patch.iceLevels.length - 1)];
     patch.dayStartHour = Math.max(0, Math.min(6, Math.round(patch.dayStartHour)));
     if (!patch.shopName) patch.shopName = 'Bubble Blush';
+    patch.receiptFeed = Math.max(0, Math.min(10, Math.round(patch.receiptFeed)));
     await Store.saveSettings(patch);
     if (!silent) { U.toast('Settings saved'); render(root); }
+    return true;
   }
 
   function setPin() {

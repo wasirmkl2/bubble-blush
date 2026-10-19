@@ -52,6 +52,11 @@ const Store = (() => {
       const existing = await DB.get('settings', 'main');
       if (!existing) await seed();
       await loadAll();
+      // v2: the shop's bill printer is a 58 mm Rongta RP58; switch to direct printing.
+      const saved = await DB.get('settings', 'main');
+      if ((saved.schema || 1) < 2) {
+        await api.saveSettings({ schema: 2, paperWidth: 58, printMode: 'direct' });
+      }
     },
     reload: loadAll,
     onChange(fn) { S.listeners.push(fn); },

@@ -25,7 +25,7 @@ See **[docs/GUIDE.md](docs/GUIDE.md)** for printer setup and the daily routine.
 ### What it does
 
 - **Sell**: tap drinks, then pick size, sugar, ice, toppings, and notes. Discounts, Cash/bKash/Nagad/Card, change calculator, customer phone with loyalty count, and a "making now" queue with *Ready* buttons.
-- **Printing**: an 80/58 mm **bill** and optional **cup stickers** (one per cup, any label size), both with your logo. You can also print an A4 **menu card**.
+- **Printing**: the 58/80 mm **bill** prints directly to the receipt printer with no print window, and the paper stops right after the bill. Optional **cup stickers** (one per cup, any label size), plus an A4 **menu card**.
 - **Inventory**: stock goes down automatically with every drink sold. You get low-stock alerts, purchases (with average cost), waste/staff drinks, stock counts, and a WhatsApp-ready shopping list.
 - **Menu & Pricing**: recipe costing per size (packaging included), cost %, profit per cup, and a suggested price for your target.
 - **Expenses**: rent, salary, bills, and other costs, so profit is real profit.

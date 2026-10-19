@@ -298,3 +298,4 @@ label.check input { width: 18px; height: 18px; accent-color: var(--teal-dd); }
   .split { grid-template-columns: 1fr; }
   .settings { grid-template-columns: 1fr; }
 }
+.helper-box { background: var(--mist); border-radius: 10px; padding: 8px 12px; font-size: 13px; }

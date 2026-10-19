@@ -1,9 +1,7 @@
 'use strict';
-/* Receipt, cup sticker and day-report printing through a hidden iframe. */
+/* Browser printing (cup stickers, menu card, and the bill fallback) through an off-screen iframe. */
 const Print = (() => {
   const e = (s) => U.esc(s);
-  const m = (n) => U.money(n);
-  const nl2br = (s) => e(s).replace(/\n/g, '<br>');
 
   const BASE_CSS = `
     *{box-sizing:border-box;margin:0;padding:0}
@@ -11,79 +9,6 @@ const Print = (() => {
     body{font-family:Arial,"Segoe UI","Nirmala UI",sans-serif}
     img{display:block}
   `;
-
-  function receiptWidths() {
-    const paper = Number(Store.settings.paperWidth) === 58 ? 58 : 80;
-    return { paper, content: paper === 58 ? 48 : 72 };
-  }
-
-  function lineOptions(l) {
-    const bits = [];
-    if (l.sugar) bits.push(`Sugar ${l.sugar}`);
-    if (l.ice) bits.push(l.ice);
-    return bits.join(' · ');
-  }
-
-  function receiptHTML(order, { reprint = false } = {}) {
-    const st = Store.settings;
-    const { paper, content } = receiptWidths();
-    const fs = Math.max(9, Math.min(16, Number(st.receiptFontPx) || 12));
-    const logo = st.logoData || LOGO_PRINT;
-    const rows = order.lines.map((l) => `
-      <div class="li">
-        <div class="row b"><span>${l.qty} × ${e(l.name)} (${e(l.sizeName)})</span><span>${m(l.basePrice * l.qty)}</span></div>
-        ${(l.toppings || []).map((t) => `<div class="row sub"><span>+ ${e(t.name)}</span><span>${m(t.price * l.qty)}</span></div>`).join('')}
-        ${lineOptions(l) ? `<div class="sub">${e(lineOptions(l))}</div>` : ''}
-        ${l.note ? `<div class="sub">Note: ${e(l.note)}</div>` : ''}
-      </div>`).join('');
-    const disc = order.discount > 0
-      ? `<div class="row"><span>Discount${order.discountInfo?.type === 'pct' ? ` (${order.discountInfo.value}%)` : ''}${order.discountInfo?.reason ? ' – ' + e(order.discountInfo.reason) : ''}</span><span>-${m(order.discount)}</span></div>` : '';
-    const vat = order.vat > 0
-      ? `<div class="row"><span>VAT ${order.vatPct}%${order.vatMode === 'inclusive' ? ' (included)' : ''}</span><span>${m(order.vat)}</span></div>` : '';
-    const cash = order.payMethod === 'Cash'
-      ? `<div class="row"><span>Cash received</span><span>${m(order.received)}</span></div><div class="row"><span>Change</span><span>${m(order.change)}</span></div>` : '';
-    return `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}
-      body{width:${paper}mm;font-size:${fs}px;line-height:1.3}
-      .r{width:${content}mm;margin:0 auto;padding:2mm 0 4mm}
-      .c{text-align:center}.b{font-weight:700}
-      .logo{width:${paper === 58 ? 30 : 38}mm;margin:0 auto 1.5mm}
-      .hr{border-top:1px dashed #000;margin:1.5mm 0}
-      .row{display:flex;justify-content:space-between;gap:2mm}
-      .row span:last-child{white-space:nowrap}
-      .li{margin:1mm 0}
-      .sub{font-size:.88em;padding-left:3mm}
-      .tot{font-size:1.45em;font-weight:800;margin:1mm 0}
-      .no{font-size:1.9em;font-weight:800;letter-spacing:.5px}
-      .tag{display:inline-block;border:1.5px solid #000;padding:0 2mm;font-weight:700;margin-top:1mm}
-      .small{font-size:.85em}
-    </style></head><body><div class="r">
-      ${st.receiptLogo ? `<img class="logo" src="${logo}" alt="">` : `<div class="c b" style="font-size:1.6em">${e(st.shopName)}</div>`}
-      ${st.tagline ? `<div class="c small">${e(st.tagline)}</div>` : ''}
-      ${st.address ? `<div class="c small">${e(st.address)}</div>` : ''}
-      ${st.phone ? `<div class="c small">${e(st.phone)}</div>` : ''}
-      ${st.bin ? `<div class="c small">BIN: ${e(st.bin)}</div>` : ''}
-      ${reprint ? '<div class="c"><span class="tag">REPRINT</span></div>' : ''}
-      ${order.status === 'void' ? '<div class="c"><span class="tag">VOID – NOT PAID</span></div>' : ''}
-      <div class="hr"></div>
-      <div class="c">Order</div>
-      <div class="c no">#${order.no}</div>
-      <div class="c b">${e(order.orderType)}</div>
-      <div class="row small"><span>${U.fmtDateTime(order.at)}</span><span>${order.cups} cup${order.cups === 1 ? '' : 's'}</span></div>
-      ${order.customerName || order.customerPhone ? `<div class="small">Customer: ${e(order.customerName)} ${e(order.customerPhone)}</div>` : ''}
-      <div class="hr"></div>
-      ${rows}
-      <div class="hr"></div>
-      <div class="row"><span>Subtotal</span><span>${m(order.subtotal)}</span></div>
-      ${disc}${vat}
-      <div class="row tot"><span>TOTAL</span><span>${m(order.total)}</span></div>
-      <div class="row"><span>Paid by</span><span>${e(order.payMethod)}</span></div>
-      ${cash}
-      ${order.note ? `<div class="hr"></div><div class="small">Note: ${e(order.note)}</div>` : ''}
-      <div class="hr"></div>
-      ${st.receiptFooter ? `<div class="c small">${nl2br(st.receiptFooter)}</div>` : ''}
-      ${st.social ? `<div class="c small b" style="margin-top:1mm">${e(st.social)}</div>` : ''}
-    </div></body></html>`;
-  }
 
   function stickersHTML(order, onlyLineIndex = null) {
     const st = Store.settings;
@@ -124,56 +49,14 @@ const Print = (() => {
     </style></head><body>${labels.join('')}</body></html>`;
   }
 
-  function dayReportHTML(r) {
-    const st = Store.settings;
-    const { paper, content } = receiptWidths();
-    const row = (a, b, cls = '') => `<div class="row ${cls}"><span>${a}</span><span>${b}</span></div>`;
-    return `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}
-      body{width:${paper}mm;font-size:12px;line-height:1.35}
-      .r{width:${content}mm;margin:0 auto;padding:2mm 0 4mm}
-      .c{text-align:center}.b{font-weight:700}
-      .hr{border-top:1px dashed #000;margin:1.5mm 0}
-      .row{display:flex;justify-content:space-between;gap:2mm}
-      .big{font-size:1.3em;font-weight:800}
-      h3{font-size:1em;margin:1mm 0}
-    </style></head><body><div class="r">
-      <div class="c b" style="font-size:1.4em">${e(st.shopName)}</div>
-      <div class="c b">${e(r.title)}</div>
-      <div class="c">${e(r.range)}</div>
-      <div class="c" style="font-size:.85em">Printed ${U.fmtDateTime(new Date().toISOString())}</div>
-      <div class="hr"></div>
-      ${row('Orders', r.orders)}${row('Cups sold', r.cups)}
-      ${row('Gross sales', m(r.gross))}${row('Discounts', '-' + m(r.discount))}
-      ${r.vat ? row('VAT', m(r.vat)) : ''}
-      ${row('NET SALES', m(r.net), 'big')}
-      ${r.voids ? row(`Voided (${r.voids})`, m(r.voidValue)) : ''}
-      <div class="hr"></div><h3>Payments</h3>
-      ${r.payments.map((p) => row(`${e(p.method)} (${p.count})`, m(p.amount))).join('')}
-      <div class="hr"></div><h3>Cash drawer</h3>
-      ${row('Opening cash', m(r.openingCash || 0))}
-      ${row('+ Cash sales', m(r.cashSales))}
-      ${row('− Cash expenses', m(r.cashExpenses))}
-      ${row('Expected in drawer', m(r.expectedCash), 'b')}
-      ${r.countedCash !== null && r.countedCash !== undefined ? row('Counted', m(r.countedCash)) + row('Difference', m(r.countedCash - r.expectedCash), 'b') : ''}
-      <div class="hr"></div><h3>Profit (estimate)</h3>
-      ${row('Ingredient cost', m(r.cogs))}
-      ${row('Gross profit', m(r.grossProfit), 'b')}
-      ${row('Expenses', m(r.expenses))}
-      ${row('Net profit', m(r.netProfit), 'b')}
-      <div class="hr"></div><h3>Top items</h3>
-      ${r.topItems.slice(0, 10).map((i) => row(`${i.qty} × ${e(i.name)}`, m(i.sales))).join('')}
-      ${r.note ? `<div class="hr"></div><div>Note: ${e(r.note)}</div>` : ''}
-      <div class="hr"></div><div class="c">Signature: ____________________</div>
-    </div></body></html>`;
-  }
-
   let busy = Promise.resolve();
 
   function run(html, { paperWidthMm = null, autoHeight = false } = {}) {
     const job = busy.then(() => new Promise((resolve) => {
       const f = document.createElement('iframe');
       f.setAttribute('aria-hidden', 'true');
-      f.style.cssText = `position:fixed;left:-10000px;top:0;border:0;opacity:0;pointer-events:none;height:200px;width:${paperWidthMm ? paperWidthMm + 'mm' : '210mm'}`;
+      // Off-screen but NOT invisible: some printers get a blank page from hidden frames.
+      f.style.cssText = `position:fixed;left:-10000px;top:0;border:0;pointer-events:none;height:200px;width:${paperWidthMm ? paperWidthMm + 'mm' : '210mm'}`;
       document.body.append(f);
       const d = f.contentDocument;
       d.open(); d.write(html); d.close();
@@ -182,8 +65,10 @@ const Print = (() => {
       const timeout = new Promise((r) => setTimeout(r, 2000));
       Promise.race([loaded, timeout]).then(() => {
         if (autoHeight && paperWidthMm) {
-          const px = Math.max(d.documentElement.scrollHeight, d.body.scrollHeight);
-          const mm = Math.ceil(px * 25.4 / 96) + 6;
+          // Page exactly as tall as the bill (measured), so the printer stops at the end.
+          const box = d.getElementById('r') || d.body;
+          const px = box.getBoundingClientRect().height;
+          const mm = Math.ceil(px * 25.4 / 96) + 2;
           const style = d.createElement('style');
           style.textContent = `@page{size:${paperWidthMm}mm ${mm}mm;margin:0}`;
           d.head.append(style);
@@ -236,12 +121,13 @@ const Print = (() => {
   }
 
   return {
-    run, receiptHTML, stickersHTML, dayReportHTML, menuHTML,
+    run, stickersHTML, menuHTML,
+    receiptHTML: (order, opts) => Receipt.html(Receipt.receiptOps(order, opts)),
     menu() { return run(menuHTML().replace('<head>', `<head><base href="${location.href.replace(/[^/]*$/, '')}">`)); },
-    receipt(order, opts) { return run(receiptHTML(order, opts), { paperWidthMm: receiptWidths().paper, autoHeight: true }); },
+    receipt: (order, opts) => Receipt.receipt(order, opts),
     stickers(order, onlyLineIndex = null) {
       return run(stickersHTML(order, onlyLineIndex), { paperWidthMm: Number(Store.settings.stickerW) || 50 });
     },
-    dayReport(r) { return run(dayReportHTML(r), { paperWidthMm: receiptWidths().paper, autoHeight: true }); },
+    dayReport: (r) => Receipt.dayReport(r),
   };
 })();
