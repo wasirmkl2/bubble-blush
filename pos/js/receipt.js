@@ -68,6 +68,29 @@ const Receipt = (() => {
     return ops;
   }
 
+  /* Kitchen ticket: what to make, big and clear, no prices. */
+  function kitchenOps(order, { reprint = false } = {}) {
+    const ops = [{ t: 'tag', s: reprint ? 'KITCHEN · REPRINT' : 'KITCHEN COPY' }];
+    ops.push({ t: 'text', s: `#${order.no}`, a: 'c', b: true, z: 2.6 });
+    ops.push({ t: 'text', s: order.orderType, a: 'c', b: true, z: 1.3 });
+    ops.push({ t: 'row', l: U.fmtTime(order.at), r: `${order.cups} cup${order.cups === 1 ? '' : 's'}`, b: true });
+    if (order.customerName) ops.push({ t: 'text', s: `Name: ${order.customerName}`, b: true, z: 1.2 });
+    ops.push({ t: 'hr' });
+    order.lines.forEach((l, i) => {
+      if (i) ops.push({ t: 'hr' });
+      ops.push({ t: 'text', s: `${l.qty} × ${l.name}`, b: true, z: 1.3 });
+      ops.push({ t: 'text', s: `Size: ${l.sizeName}`, z: 1.15, i: 1 });
+      if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}`, z: 1.15, i: 1 });
+      if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 1.15, i: 1 });
+      (l.toppings || []).forEach((tp) => ops.push({ t: 'text', s: `+ ${tp.name}`, b: true, z: 1.15, i: 1 }));
+      if (l.note) ops.push({ t: 'text', s: `NOTE: ${l.note}`, b: true, z: 1.15, i: 1 });
+    });
+    const note = String(order.note || '').split(' · ').filter((x) => !/^TrxID:/.test(x)).join(' · ');
+    if (note) { ops.push({ t: 'hr' }); ops.push({ t: 'text', s: `ORDER NOTE: ${note}`, b: true, z: 1.15 }); }
+    ops.push({ t: 'hr' });
+    return ops;
+  }
+
   function dayReportOps(r) {
     const st = Store.settings;
     const m = (n) => U.money(n);
@@ -194,9 +217,9 @@ const Receipt = (() => {
         scratch.font = f;
         const w = scratch.measureText(o.s).width + base;
         y += 4;
-        items.push({ t: 'box', x: Math.round((dots - w) / 2), y, w: Math.round(w), h: Math.round(base * 1.45) });
-        items.push({ t: 'text', s: o.s, font: f, a: 'c', x0: 0, y: y + Math.round(base * 0.12), size: base });
-        y += Math.round(base * 1.45) + 6;
+        items.push({ t: 'box', x: Math.round((dots - w) / 2), y, w: Math.round(w), h: Math.round(base * 1.65) });
+        items.push({ t: 'text', s: o.s, font: f, a: 'c', x0: 0, y: y + Math.round(base * 0.3), size: base });
+        y += Math.round(base * 1.65) + 8;
       }
     });
     const height = Math.max(8, Math.ceil(y + 4));
@@ -358,7 +381,7 @@ const Receipt = (() => {
     if (st.printMode !== 'browser') {
       try {
         const cv = await renderCanvas(ops, p.dots);
-        const bytes = escpos(cv, { feed: st.receiptFeed ?? 4, cut: !!st.receiptCut, drawer: !!st.openDrawer && doc !== 'Day report', mode: st.imageMode === 'compat' ? 'compat' : 'raster' });
+        const bytes = escpos(cv, { feed: st.receiptFeed ?? 4, cut: !!st.receiptCut, drawer: !!st.openDrawer && /^Bill/.test(doc), mode: st.imageMode === 'compat' ? 'compat' : 'raster' });
         await helper.send(bytes, doc);
         return { ok: true, direct: true };
       } catch (err) {
@@ -371,8 +394,9 @@ const Receipt = (() => {
   }
 
   return {
-    paper, receiptOps, dayReportOps, renderCanvas, escpos, html, helper, print,
+    paper, receiptOps, kitchenOps, dayReportOps, renderCanvas, escpos, html, helper, print,
     receipt: (order, opts) => print(receiptOps(order, opts), `Bill #${order.no}`),
+    kitchen: (order, opts) => print(kitchenOps(order, opts), `Kitchen #${order.no}`),
     dayReport: (r) => print(dayReportOps(r), 'Day report'),
   };
 })();

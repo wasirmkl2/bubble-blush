@@ -30,6 +30,7 @@ const Seed = (() => {
     stickerShowShop: true,
     printReceiptDefault: true,
     printStickerDefault: true,
+    printKitchenDefault: true,  // second copy for the staff making the drinks
     vatPct: 0,
     vatMode: 'exclusive',
     dayStartHour: 4,

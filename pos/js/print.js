@@ -125,6 +125,7 @@ const Print = (() => {
     receiptHTML: (order, opts) => Receipt.html(Receipt.receiptOps(order, opts)),
     menu() { return run(menuHTML().replace('<head>', `<head><base href="${location.href.replace(/[^/]*$/, '')}">`)); },
     receipt: (order, opts) => Receipt.receipt(order, opts),
+    kitchen: (order, opts) => Receipt.kitchen(order, opts),
     stickers(order, onlyLineIndex = null) {
       return run(stickersHTML(order, onlyLineIndex), { paperWidthMm: Number(Store.settings.stickerW) || 50 });
     },

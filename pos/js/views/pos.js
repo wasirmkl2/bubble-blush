@@ -25,7 +25,7 @@ Views.pos = (() => {
     cart = loadCart();
     if (!st().orderTypes.includes(cart.orderType)) cart.orderType = null;
     if (!cart.orderType) cart.orderType = st().orderTypes[0] || 'Takeaway';
-    if (!printPrefs) printPrefs = { receipt: !!st().printReceiptDefault, sticker: !!st().printStickerDefault };
+    if (!printPrefs) printPrefs = { receipt: !!st().printReceiptDefault, kitchen: st().printKitchenDefault !== false, sticker: !!st().printStickerDefault };
     el.innerHTML = `
       <div class="pos">
         <section class="pos-menu">
@@ -314,7 +314,8 @@ Views.pos = (() => {
       </div>
       <div class="loyal" id="loyal"></div>
       <div class="print-opts">
-        <label class="check"><input type="checkbox" id="prReceipt" ${printPrefs.receipt ? 'checked' : ''}> 🧾 Print bill</label>
+        <label class="check"><input type="checkbox" id="prReceipt" ${printPrefs.receipt ? 'checked' : ''}> 🧾 Customer bill</label>
+        <label class="check"><input type="checkbox" id="prKitchen" ${printPrefs.kitchen ? 'checked' : ''}> 👩‍🍳 Kitchen copy</label>
         ${st().stickersEnabled ? `<label class="check"><input type="checkbox" id="prSticker" ${printPrefs.sticker ? 'checked' : ''}> 🏷 Print cup stickers (${t.cups})</label>` : ''}
       </div>`;
     const md = U.modal({
@@ -368,6 +369,7 @@ Views.pos = (() => {
       if (method === 'Cash' && received < t.total) { U.toast('Cash received is less than the total', 'err'); cashIn.focus(); return false; }
       printPrefs.receipt = !!U.$('#prReceipt', body)?.checked;
       printPrefs.sticker = !!U.$('#prSticker', body)?.checked;
+      printPrefs.kitchen = !!U.$('#prKitchen', body)?.checked;
       const ref = U.$('#payRef', body)?.value.trim();
       let order;
       try {
@@ -394,6 +396,7 @@ Views.pos = (() => {
       App.banners();
       showDone(order);
       if (printPrefs.receipt) await Print.receipt(order);
+      if (printPrefs.kitchen) await Print.kitchen(order);
       if (printPrefs.sticker && st().stickersEnabled) await Print.stickers(order);
       return true;
     }

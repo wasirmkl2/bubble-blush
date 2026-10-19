@@ -58,13 +58,14 @@ Views.settings = (() => {
             <div class="span2"><label>Bill footer message</label><textarea data-k="receiptFooter" rows="2">${U.esc(s.receiptFooter)}</textarea></div>
             <div class="span2 checks">
               <label class="check"><input type="checkbox" data-k="receiptLogo" ${s.receiptLogo ? 'checked' : ''}> Print logo on bill</label>
-              <label class="check"><input type="checkbox" data-k="printReceiptDefault" ${s.printReceiptDefault ? 'checked' : ''}> Tick “Print bill” by default</label>
+              <label class="check"><input type="checkbox" data-k="printReceiptDefault" ${s.printReceiptDefault ? 'checked' : ''}> Tick “Customer bill” by default</label>
+              <label class="check"><input type="checkbox" data-k="printKitchenDefault" ${s.printKitchenDefault !== false ? 'checked' : ''}> Tick “Kitchen copy” by default</label>
             </div>
             <div class="span2 logo-row"><img id="sLogoPrev" src="${s.logoData || LOGO_PRINT}" alt="logo">
               <div><label>Bill logo (black &amp; white works best on thermal paper)</label>
                 <input type="file" id="sLogo" accept="image/*"> <button class="btn sm ghost" id="sLogoReset">Use default</button></div></div>
           </div>
-          <button class="btn ghost mt" id="sTestR">🖨 Test print bill</button></div>
+          <div class="tools mt"><button class="btn ghost" id="sTestR">🖨 Test print bill</button><button class="btn ghost" id="sTestK">👩‍🍳 Test kitchen copy</button></div></div>
 
         <div class="card"><h3>🏷 Cup sticker printer</h3>
           <div class="form-grid">
@@ -135,6 +136,7 @@ Views.settings = (() => {
       const r = await Print.receipt(sampleOrder());
       if (r && r.direct) U.toast(`Test bill sent to ${Store.settings.receiptPrinter}`);
     };
+    U.$('#sTestK', el).onclick = async () => { if (await save(true)) Print.kitchen(sampleOrder()); };
     U.$('#sPrRefresh', el).onclick = () => checkHelper(el);
     U.$('[data-k="printMode"]', el).onchange = () => checkHelper(el);
     checkHelper(el);
