@@ -143,5 +143,6 @@ const Print = (() => {
       return run(stickersHTML(order, onlyLineIndex), { paperWidthMm: Number(Store.settings.stickerW) || 50 });
     },
     dayReport: (r) => Receipt.dayReport(r),
+    spacingTest: () => Receipt.spacingTest(),
   };
 })();

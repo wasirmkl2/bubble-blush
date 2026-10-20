@@ -18,7 +18,8 @@ const Seed = (() => {
     printMode: 'direct',      // 'direct' = print helper (exact length, no dialog) · 'browser' = print window
     receiptPrinter: '',       // Windows printer name for bills (auto-detected)
     imageMode: 'raster',      // 'raster' (GS v 0) or 'compat' (ESC *) for older printers
-    receiptFeed: 4,           // blank lines after the bill so it clears the tear bar
+    marginTopMm: 5,           // blank paper above the first line (mm)
+    marginBottomMm: 16,       // blank paper after the last line, so tearing never cuts text (mm)
     receiptCut: false,        // send a cut command (only for printers with an auto-cutter)
     openDrawer: false,        // kick a cash drawer connected to the bill printer
     schema: 3,

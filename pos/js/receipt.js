@@ -98,6 +98,23 @@ const Receipt = (() => {
     return ops;
   }
 
+  /* Short test strip for setting the top/bottom space. */
+  function spacingTestOps() {
+    const mg = margins();
+    return [
+      { t: 'text', s: '>>> FIRST LINE <<<', a: 'c', b: true, z: 1.2 },
+      { t: 'text', s: `Space above: ${mg.top} mm`, a: 'c', z: 0.9 },
+      { t: 'hr' },
+      { t: 'text', s: 'Tear the paper, then check:', z: 0.9 },
+      { t: 'text', s: '• First line cut? Increase Space above.', z: 0.9 },
+      { t: 'text', s: '• Last line cut? Increase Space below.', z: 0.9 },
+      { t: 'text', s: '• Too much blank paper? Decrease it.', z: 0.9 },
+      { t: 'hr' },
+      { t: 'text', s: `Space below: ${mg.bottom} mm`, a: 'c', z: 0.9 },
+      { t: 'text', s: '>>> LAST LINE <<<', a: 'c', b: true, z: 1.2 },
+    ];
+  }
+
   function dayReportOps(r) {
     const st = Store.settings;
     const m = (n) => U.money(n);
@@ -174,8 +191,16 @@ const Receipt = (() => {
     return out;
   }
 
+  const DOTS_PER_MM = 8; // 203 dpi thermal heads
+  const clampMm = (v, d, max) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : d; };
+  function margins() {
+    const st = Store.settings;
+    return { top: clampMm(st.marginTopMm, 5, 30), bottom: clampMm(st.marginBottomMm, 16, 40) };
+  }
+
   async function renderCanvas(ops, dots) {
     const st = Store.settings;
+    const mg = margins();
     const base = Math.round((dots / 384) * 22 * ((Number(st.receiptFontPx) || 12) / 12));
     const lh = 1.28;
     const indent = Math.round(base * 0.9);
@@ -188,7 +213,8 @@ const Receipt = (() => {
 
     // pass 1: layout
     const items = [];
-    let y = 4;
+    // Blank space is part of the image (exact dots), so it is the same on every print.
+    let y = Math.round(mg.top * DOTS_PER_MM);
     ops.forEach((o, k) => {
       const size = Math.round(base * (o.z || 1));
       const x0 = pad + (o.i || 0) * indent;
@@ -230,7 +256,7 @@ const Receipt = (() => {
         y += Math.round(base * 1.65) + 8;
       }
     });
-    const height = Math.max(8, Math.ceil(y + 4));
+    const height = Math.ceil(y + Math.max(1, Math.round(mg.bottom * DOTS_PER_MM)));
 
     // pass 2: draw
     const cv = document.createElement('canvas');
@@ -260,7 +286,7 @@ const Receipt = (() => {
   }
 
   /* ---------- ESC/POS ---------- */
-  function escpos(canvas, { feed = 4, cut = false, drawer = false, mode = 'raster' } = {}) {
+  function escpos(canvas, { cut = false, drawer = false, mode = 'raster' } = {}) {
     const W = canvas.width;
     const H = canvas.height;
     const bpr = Math.ceil(W / 8);
@@ -288,6 +314,9 @@ const Receipt = (() => {
             out.push(byte);
           }
         }
+        // last strip: advance only the rows actually used, so the bottom gap is exact
+        const rows = Math.min(24, H - y0);
+        if (rows < 24) push(0x1b, 0x33, rows);
         push(0x0a);
       }
       push(0x1b, 0x32); // default line spacing
@@ -307,8 +336,6 @@ const Receipt = (() => {
         }
       }
     }
-    const n = Math.max(0, Math.min(10, Math.round(Number(feed) || 0)));
-    if (n) push(0x1b, 0x64, n); // feed n lines so the end clears the tear bar
     if (cut) push(0x1d, 0x56, 0x42, 0x00); // feed & partial cut (ignored by printers without a cutter)
     return new Uint8Array(out);
   }
@@ -375,7 +402,7 @@ const Receipt = (() => {
       *{box-sizing:border-box;margin:0;padding:0}
       html,body{background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
       body{width:${p.mm}mm;font-family:${FONT};font-size:${fs}px;line-height:1.3}
-      #r{width:${p.mm}mm;padding:1mm 0 3mm}
+      #r{width:${p.mm}mm;padding:${margins().top}mm 0 ${margins().bottom}mm}
       .row{display:flex;justify-content:space-between;gap:2mm}.row span:last-child{white-space:nowrap}
       .hr{border-top:1px dashed #000;margin:1.5mm 0}
       .tag{display:inline-block;border:1.5px solid #000;padding:0 2mm;font-weight:700;margin-top:1mm}
@@ -389,7 +416,7 @@ const Receipt = (() => {
     if (st.printMode !== 'browser') {
       try {
         const cv = await renderCanvas(ops, p.dots);
-        const bytes = escpos(cv, { feed: st.receiptFeed ?? 4, cut: !!st.receiptCut, drawer: !!st.openDrawer && /^Bill/.test(doc), mode: st.imageMode === 'compat' ? 'compat' : 'raster' });
+        const bytes = escpos(cv, { cut: !!st.receiptCut, drawer: !!st.openDrawer && /^Bill/.test(doc), mode: st.imageMode === 'compat' ? 'compat' : 'raster' });
         await helper.send(bytes, doc);
         return { ok: true, direct: true };
       } catch (err) {
@@ -402,9 +429,10 @@ const Receipt = (() => {
   }
 
   return {
-    paper, receiptOps, kitchenOps, dayReportOps, renderCanvas, escpos, html, helper, print,
+    paper, margins, receiptOps, kitchenOps, dayReportOps, renderCanvas, escpos, html, helper, print,
     receipt: (order, opts) => print(receiptOps(order, opts), `Bill #${order.no}`),
     kitchen: (order, opts) => print(kitchenOps(order, opts), `Kitchen #${order.no}`),
     dayReport: (r) => print(dayReportOps(r), 'Day report'),
+    spacingTest: () => print(spacingTestOps(), 'Spacing test'),
   };
 })();

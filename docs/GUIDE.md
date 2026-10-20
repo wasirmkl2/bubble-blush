@@ -29,7 +29,7 @@ Bills print **directly** to the printer through a small *print helper* that star
 |---|---|
 | "Print helper is not running" | Close every POS window and open it again with the desktop shortcut. Still failing? Double-click `pos\helper\Run print helper (troubleshoot).bat` and photograph the error. |
 | Bill prints strange symbols or garbage | Settings → Image mode → **Compatibility** → Save → test again. |
-| Paper doesn't come out far enough to tear | Increase "Blank lines after bill" (e.g. 5–6). |
+| Text cut when tearing, or uneven gaps | Settings → **Space above first line** / **Space after last line** (mm), then **📏 Spacing test**. Defaults: 5 mm and 16 mm. |
 | Text cut off at the edge | Check Paper width matches your roll (58 mm). |
 
 If you switch to the **Browser print window** method instead, the printer driver's paper size decides how far the paper feeds. Rongta's default long-roll size (58 × 3276 mm) feeds metres of blank paper, which is why Direct is the default.

@@ -53,7 +53,8 @@ Views.settings = (() => {
             <div><label>Image mode (direct)</label><select data-k="imageMode">
               <option value="raster" ${s.imageMode !== 'compat' ? 'selected' : ''}>Standard (fast)</option>
               <option value="compat" ${s.imageMode === 'compat' ? 'selected' : ''}>Compatibility: use if bill prints strange symbols</option></select></div>
-            <div><label>Blank lines after bill (direct)</label><input type="number" data-k="receiptFeed" data-num min="0" max="10" value="${s.receiptFeed ?? 4}"></div>
+            <div><label>Space above first line (mm)</label><input type="number" data-k="marginTopMm" data-num min="0" max="30" step="1" value="${s.marginTopMm ?? 5}"></div>
+            <div><label>Space after last line (mm) <small class="muted">so tearing doesn't cut text</small></label><input type="number" data-k="marginBottomMm" data-num min="0" max="40" step="1" value="${s.marginBottomMm ?? 16}"></div>
             <div class="checks" style="align-items:flex-end">
               <label class="check"><input type="checkbox" data-k="receiptCut" ${s.receiptCut ? 'checked' : ''}> Auto-cut paper</label>
               <label class="check"><input type="checkbox" data-k="openDrawer" ${s.openDrawer ? 'checked' : ''}> Open cash drawer</label>
@@ -68,7 +69,7 @@ Views.settings = (() => {
               <div><label>Bill logo (black &amp; white works best on thermal paper)</label>
                 <input type="file" id="sLogo" accept="image/*"> <button class="btn sm ghost" id="sLogoReset">Use default</button></div></div>
           </div>
-          <div class="tools mt"><button class="btn ghost" id="sTestR">🖨 Test print bill</button><button class="btn ghost" id="sTestK">👩‍🍳 Test kitchen copy</button></div></div>
+          <div class="tools mt"><button class="btn ghost" id="sTestR">🖨 Test print bill</button><button class="btn ghost" id="sTestK">👩‍🍳 Test kitchen copy</button><button class="btn ghost" id="sTestSp">📏 Spacing test</button></div></div>
 
         <div class="card"><h3>🏷 Cup sticker printer</h3>
           <div class="form-grid">
@@ -150,6 +151,7 @@ Views.settings = (() => {
       const r = await Print.receipt(sampleOrder());
       if (r && r.direct) U.toast(`Test bill sent to ${Store.settings.receiptPrinter}`);
     };
+    U.$('#sTestSp', el).onclick = async () => { if (await save(true)) Print.spacingTest(); };
     U.$('#sTestK', el).onclick = async () => { if (await save(true)) Print.kitchen(sampleOrder()); };
     U.$('#sPrRefresh', el).onclick = () => checkHelper(el);
     U.$('[data-k="printMode"]', el).onchange = () => checkHelper(el);
@@ -235,7 +237,8 @@ Views.settings = (() => {
     if (!patch.iceLevels.includes(patch.defaultIce)) patch.defaultIce = patch.iceLevels[Math.min(2, patch.iceLevels.length - 1)];
     patch.dayStartHour = Math.max(0, Math.min(6, Math.round(patch.dayStartHour)));
     if (!patch.shopName) patch.shopName = 'Bubble Blush';
-    patch.receiptFeed = Math.max(0, Math.min(10, Math.round(patch.receiptFeed)));
+    patch.marginTopMm = Math.max(0, Math.min(30, Math.round(patch.marginTopMm)));
+    patch.marginBottomMm = Math.max(0, Math.min(40, Math.round(patch.marginBottomMm)));
     let from = U.$('#pFrom', root).value; let to = U.$('#pTo', root).value;
     if (from && to && from > to) [from, to] = [to, from];
     patch.promo = { enabled: U.$('#pOn', root).checked, name: U.$('#pName', root).value.trim() || 'Free Topping', from, to };
