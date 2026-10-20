@@ -71,7 +71,8 @@ Views.orders = (() => {
       <td>${l.qty}×</td>
       <td><b>${U.esc(l.name)}</b> (${U.esc(l.sizeName)})
         <div class="muted small">${[l.sugar && 'Sugar ' + l.sugar, l.ice].filter(Boolean).map(U.esc).join(' · ')}
-        ${l.toppings.length ? '<br>+ ' + l.toppings.map((t) => U.esc(t.name)).join(', ') : ''}${l.note ? '<br>✎ ' + U.esc(l.note) : ''}</div></td>
+        ${(l.included || []).length ? '<br>Included: ' + l.included.map(U.esc).join(', ') : ''}
+        ${l.toppings.length ? '<br>' + l.toppings.map((t, k) => `+ ${U.esc(t.name)} ${U.money(t.price)}${l.promo && k === l.promoIndex ? ' <b class="free-tag">FREE</b>' : ''}`).join('<br>') : ''}${l.note ? '<br>✎ ' + U.esc(l.note) : ''}</div></td>
       <td class="r">${U.money(l.lineTotal)}</td>
       <td><button class="btn sm ghost" data-sticker="${i}" title="Reprint stickers for this drink">🏷</button></td></tr>`).join('');
     const margin = o.total ? (o.total - o.cost) / o.total : 0;
@@ -86,6 +87,7 @@ Views.orders = (() => {
         <table class="tbl compact">${lines}</table>
         <div class="tot-box">
           <div class="tot-row"><span>Subtotal</span><span>${U.money(o.subtotal)}</span></div>
+          ${o.promo ? `<div class="tot-row disc"><span>🎁 ${U.esc(o.promoName || 'Promotion')}</span><span>-${U.money(o.promo)}</span></div>` : ''}
           ${o.discount ? `<div class="tot-row disc"><span>Discount ${o.discountInfo?.reason ? '· ' + U.esc(o.discountInfo.reason) : ''}</span><span>-${U.money(o.discount)}</span></div>` : ''}
           ${o.vat ? `<div class="tot-row"><span>VAT</span><span>${U.money(o.vat)}</span></div>` : ''}
           <div class="tot-row grand"><span>Total</span><span>${U.money(o.total)}</span></div>

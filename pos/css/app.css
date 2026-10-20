@@ -303,3 +303,20 @@ label.check input { width: 18px; height: 18px; accent-color: var(--teal-dd); }
 .btn.gold { background: var(--gold); border-color: var(--gold); color: #fff; }
 .kprompt .kp-step { font-size: 17px; margin-bottom: 10px; }
 .kprompt .kp-step b { color: var(--teal-dd); }
+
+/* menu v3: badges, included toppings, flavours, promotion */
+.ic-badge { display: inline-block; align-self: flex-start; font-size: 10.5px; font-weight: 700; color: #fff; background: var(--gold); border-radius: 99px; padding: 1px 8px; }
+.ic-badge.big { font-size: 12px; padding: 2px 10px; margin-bottom: 6px; }
+.incl { background: #E3F2E8; color: var(--ok); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.req { color: var(--bad); font-weight: 700; }
+.size-btn { position: relative; }
+.size-btn kbd { position: absolute; top: 4px; right: 6px; font-size: 10px; color: var(--muted); font-family: inherit; }
+.fl-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.fl-name { font-weight: 700; font-size: 13px; min-width: 150px; }
+.fl-name small { color: var(--muted); font-weight: 500; }
+.promo-pill { margin-left: 6px; background: var(--gold); color: #fff; border-radius: 99px; padding: 1px 9px; font-size: 11px; text-transform: none; }
+.opt-sum { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 12px; font-size: 13px; }
+.opt-sum:empty { display: none; }
+.sum-top { background: var(--mist); border-radius: 8px; padding: 3px 9px; }
+.sum-top.free { background: #FBF0D9; color: var(--warn); font-weight: 700; }
+.free-tag { color: var(--gold); }

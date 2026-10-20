@@ -31,6 +31,8 @@ Views.reports = (() => {
       cups: U.sum(paid, (o) => o.cups),
       gross: U.sum(paid, (o) => o.subtotal),
       discount: U.sum(paid, (o) => o.discount),
+      promo: U.sum(paid, (o) => o.promo || 0),
+      promoCups: U.sum(paid, (o) => U.sum(o.lines, (l) => (l.promo ? l.qty : 0))),
       vat: U.sum(paid, (o) => o.vat),
       collected: U.sum(paid, (o) => o.total),
       cogs: U.round(U.sum(paid, (o) => o.cost)),
@@ -198,6 +200,7 @@ Views.reports = (() => {
           ${r.cups ? `<p class="muted small mt">${U.pct(U.sum(r.toppings, (t) => t.qty) / r.cups)} topping attach rate — suggest a topping with every order!</p>` : ''}</div>
         <div class="card"><h3>💰 Money summary</h3>
           <div class="tot-row"><span>Gross sales (menu price)</span><span>${U.money(r.gross)}</span></div>
+          ${r.promo ? `<div class="tot-row disc"><span>Promotion (${r.promoCups} free toppings)</span><span>-${U.money(r.promo)}</span></div>` : ''}
           <div class="tot-row disc"><span>Discounts (${r.discountedOrders} orders)</span><span>-${U.money(r.discount)}</span></div>
           ${r.vat ? `<div class="tot-row"><span>VAT collected</span><span>${U.money(r.vat)}</span></div>` : ''}
           <div class="tot-row"><span><b>Collected</b></span><span><b>${U.money(r.collected)}</b></span></div>

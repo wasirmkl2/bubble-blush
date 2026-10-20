@@ -34,8 +34,10 @@ const Store = (() => {
     S.category = byId(S.categories);
   }
 
+  const defaultDay = () => U.dayKey(new Date(Date.now() - (Number(Seed.SETTINGS.dayStartHour) || 0) * 3600 * 1000));
+
   async function seed() {
-    const d = Seed.build();
+    const d = Seed.build(defaultDay());
     await DB.transact(['settings', 'categories', 'items', 'toppings', 'ingredients'], (o) => {
       o.settings.put(d.settings);
       d.categories.forEach((x) => o.categories.put(x));
@@ -43,6 +45,38 @@ const Store = (() => {
       d.toppings.forEach((x) => o.toppings.put(x));
       d.ingredients.forEach((x) => o.ingredients.put(x));
     });
+  }
+
+  /* v3: replace the demo menu with the finalized Bubble Blush menu. Sales history is kept. */
+  async function migrateToFinalMenu() {
+    const d = Seed.build(api.businessDay());
+    const [oldIngs, moves] = await Promise.all([DB.all('ingredients'), DB.all('stockMoves')]);
+    const used = new Set();
+    const mark = (rec) => (rec || []).forEach((r) => used.add(r.ingId));
+    d.items.forEach((i) => i.sizes.forEach((z) => mark(z.recipe)));
+    d.toppings.forEach((t) => { mark(t.recipe); (t.flavours || []).forEach((f) => mark(f.recipe)); });
+    d.settings.sizes.forEach((z) => mark(z.packaging));
+    const bought = new Set(moves.filter((m) => m.type === 'purchase').map((m) => m.ingId));
+    const seedIng = Object.fromEntries(d.ingredients.map((x) => [x.id, x]));
+    await DB.transact(['categories', 'items', 'toppings', 'ingredients'], (o) => {
+      o.categories.clear(); o.items.clear(); o.toppings.clear();
+      d.categories.forEach((x) => o.categories.put(x));
+      d.items.forEach((x) => o.items.put(x));
+      d.toppings.forEach((x) => o.toppings.put(x));
+      const have = new Set(oldIngs.map((x) => x.id));
+      oldIngs.forEach((ing) => {
+        if (seedIng[ing.id]) o.ingredients.put({ ...ing, name: seedIng[ing.id].name }); // keep stock & cost
+        else if (!used.has(ing.id) && !bought.has(ing.id)) o.ingredients.delete(ing.id); // old demo-only ingredient
+      });
+      d.ingredients.forEach((x) => { if (!have.has(x.id)) o.ingredients.put(x); });
+    });
+    const st = d.settings;
+    await loadAll();
+    await api.saveSettings({
+      schema: 3, sizes: st.sizes, sugarLevels: st.sugarLevels, sugarLabels: st.sugarLabels, iceLevels: st.iceLevels,
+      defaultSugar: st.defaultSugar, defaultIce: st.defaultIce, tagline: st.tagline, receiptFooter: st.receiptFooter, promo: st.promo,
+    });
+    localStorage.removeItem('bb-cart');
   }
 
   const api = {
@@ -57,6 +91,7 @@ const Store = (() => {
       if ((saved.schema || 1) < 2) {
         await api.saveSettings({ schema: 2, paperWidth: 58, printMode: 'direct' });
       }
+      if ((saved.schema || 1) < 3) await migrateToFinalMenu();
     },
     reload: loadAll,
     onChange(fn) { S.listeners.push(fn); },
@@ -87,13 +122,34 @@ const Store = (() => {
       const s = item.sizes.find((x) => x.sizeId === sizeId);
       return s ? api.recipeCost(s.recipe) + api.packagingCost(sizeId) : 0;
     },
-    toppingCost(t) { return api.recipeCost(t?.recipe || []); },
+    /* Recipe for a topping (or one of its flavours). Without a flavour id, the first flavour stands in. */
+    toppingRecipe(t, flavourId) {
+      if (!t) return [];
+      const fl = (t.flavours || []);
+      const f = fl.find((x) => x.id === flavourId) || (flavourId === undefined ? fl[0] : null);
+      return f && f.recipe && f.recipe.length ? f.recipe : (t.recipe || []);
+    },
+    toppingCost(t, flavourId) { return api.recipeCost(api.toppingRecipe(t, flavourId)); },
+    includedNames(item) { return (item?.included || []).map((id) => S.topping[id]?.name).filter(Boolean); },
+
+    /* ---------- promotion: one free topping per drink ---------- */
+    promoActive(day = api.businessDay()) {
+      const p = S.settings.promo || {};
+      return !!(p.enabled && p.from && p.to && day >= p.from && day <= p.to);
+    },
+    /* Per-cup discount: the most expensive topping the customer added (included toppings are never charged). */
+    linePromo(line, active = api.promoActive()) {
+      if (!active || !(line.toppings || []).length) return { amount: 0, index: -1 };
+      let index = 0;
+      line.toppings.forEach((t, i) => { if (U.n(t.price) > U.n(line.toppings[index].price)) index = i; });
+      return { amount: U.n(line.toppings[index].price), index };
+    },
     /* Price that hits a target food-cost %, rounded up to the next ৳10. */
     suggestPrice(cost, target = 0.3) { return cost > 0 ? Math.ceil(cost / target / 10) * 10 : 0; },
     lineCost(line) {
       const item = S.item[line.itemId];
       const base = item ? api.itemSizeCost(item, line.sizeId) : 0;
-      const tops = U.sum(line.toppings || [], (t) => api.toppingCost(S.topping[t.id]));
+      const tops = U.sum(line.toppings || [], (t) => api.toppingCost(S.topping[t.id], t.flavourId || null));
       return (base + tops) * line.qty;
     },
     lineUnitPrice(line) { return U.n(line.basePrice) + U.sum(line.toppings || [], (t) => t.price); },
@@ -108,20 +164,22 @@ const Store = (() => {
       const sz = item?.sizes.find((x) => x.sizeId === line.sizeId);
       add(sz?.recipe, line.qty);
       add(api.size(line.sizeId)?.packaging, line.qty);
-      (line.toppings || []).forEach((t) => add(S.topping[t.id]?.recipe, line.qty));
+      (line.toppings || []).forEach((t) => add(api.toppingRecipe(S.topping[t.id], t.flavourId || null), line.qty));
       return into;
     },
 
     /* ---------- totals ---------- */
-    totals(lines, discount) {
+    totals(lines, discount, promoOn = api.promoActive()) {
       const st = S.settings;
       const subtotal = U.sum(lines, (l) => api.lineUnitPrice(l) * l.qty);
+      const promo = U.sum(lines, (l) => api.linePromo(l, promoOn).amount * l.qty);
+      const afterPromo = subtotal - promo;
       let discAmt = 0;
       if (discount && discount.value > 0) {
-        discAmt = discount.type === 'pct' ? subtotal * discount.value / 100 : discount.value;
+        discAmt = discount.type === 'pct' ? afterPromo * discount.value / 100 : discount.value;
       }
-      discAmt = Math.min(subtotal, Math.round(discAmt));
-      const afterDisc = subtotal - discAmt;
+      discAmt = Math.min(afterPromo, Math.round(discAmt));
+      const afterDisc = afterPromo - discAmt;
       const pct = U.n(st.vatPct);
       let vat = 0;
       let total = afterDisc;
@@ -129,7 +187,7 @@ const Store = (() => {
         if (st.vatMode === 'inclusive') vat = U.round(afterDisc - afterDisc / (1 + pct / 100));
         else { vat = Math.round(afterDisc * pct / 100); total = afterDisc + vat; }
       }
-      return { subtotal, discount: discAmt, vat, total: Math.round(total), cups: U.sum(lines, (l) => l.qty) };
+      return { subtotal, promo, discount: discAmt, vat, total: Math.round(total), cups: U.sum(lines, (l) => l.qty) };
     },
 
     /* ---------- orders ---------- */
@@ -141,23 +199,31 @@ const Store = (() => {
     async placeOrder({ lines, discount, orderType, customerName, customerPhone, payMethod, received, note }) {
       const now = new Date();
       const dayKey = api.businessDay(now);
-      const t = api.totals(lines, discount);
+      const promoOn = api.promoActive(dayKey);
+      const t = api.totals(lines, discount, promoOn);
       const no = await api.nextOrderNo(dayKey);
-      const orderLines = lines.map((l) => ({
-        itemId: l.itemId,
-        name: l.name,
-        sizeId: l.sizeId,
-        sizeName: api.sizeLabel(l.sizeId),
-        basePrice: l.basePrice,
-        toppings: (l.toppings || []).map((x) => ({ id: x.id, name: x.name, price: x.price })),
-        sugar: l.sugar || '',
-        ice: l.ice || '',
-        note: l.note || '',
-        qty: l.qty,
-        unitPrice: api.lineUnitPrice(l),
-        lineTotal: api.lineUnitPrice(l) * l.qty,
-        cost: U.round(api.lineCost(l)),
-      }));
+      const orderLines = lines.map((l) => {
+        const pr = api.linePromo(l, promoOn);
+        return {
+          itemId: l.itemId,
+          name: l.name,
+          sizeId: l.sizeId,
+          sizeName: api.sizeLabel(l.sizeId),
+          basePrice: l.basePrice,
+          toppings: (l.toppings || []).map((x) => ({ id: x.id, flavourId: x.flavourId || null, name: x.name, price: x.price })),
+          included: api.includedNames(S.item[l.itemId]),
+          sugar: l.sugar || '',
+          ice: l.ice || '',
+          note: l.note || '',
+          qty: l.qty,
+          unitPrice: api.lineUnitPrice(l),
+          promo: pr.amount,          // per cup
+          promoIndex: pr.index,      // which topping was free
+          lineGross: api.lineUnitPrice(l) * l.qty,
+          lineTotal: (api.lineUnitPrice(l) - pr.amount) * l.qty,
+          cost: U.round(api.lineCost(l)),
+        };
+      });
       const usage = {};
       lines.forEach((l) => api.lineUsage(l, usage));
       const order = {
@@ -172,6 +238,8 @@ const Store = (() => {
         lines: orderLines,
         cups: t.cups,
         subtotal: t.subtotal,
+        promo: t.promo,
+        promoName: t.promo ? (S.settings.promo?.name || 'Promotion') : '',
         discount: t.discount,
         discountInfo: discount && discount.value > 0 ? { ...discount } : null,
         vat: t.vat,

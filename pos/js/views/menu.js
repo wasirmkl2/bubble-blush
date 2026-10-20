@@ -138,6 +138,10 @@ Views.menu = (() => {
         <div><label>Drink name</label><input type="text" id="iName" value="${U.esc(it.name)}" autofocus></div>
         <div><label>Category</label><select id="iCat">${Store.S.categories.map((c) => `<option value="${c.id}" ${c.id === it.catId ? 'selected' : ''}>${U.esc(c.name)}</option>`).join('')}</select></div>
         <div class="span2"><label>Short description (shown on menu)</label><input type="text" id="iDesc" value="${U.esc(it.desc || '')}"></div>
+        <div><label>Label (e.g. Our Signature)</label><input type="text" id="iBadge" value="${U.esc(it.badge || '')}"></div>
+        <div><label>Included toppings (free, part of the drink)</label><div class="checks">${Store.S.toppings.map((t) => `
+          <label class="check"><input type="checkbox" data-inc="${t.id}" ${(it.included || []).includes(t.id) ? 'checked' : ''}> ${U.esc(t.name)}</label>`).join('')}</div>
+          <small class="muted">Also put its ingredient in the recipe below so stock is deducted.</small></div>
         <div class="span2 checks">
           <label class="check"><input type="checkbox" id="iActive" ${it.active ? 'checked' : ''}> On sale</label>
           <label class="check"><input type="checkbox" id="iSugar" ${it.allowSugar ? 'checked' : ''}> Ask sugar level</label>
@@ -199,6 +203,8 @@ Views.menu = (() => {
           if (!it.name) { U.toast('Give the drink a name', 'err'); return false; }
           it.catId = U.$('#iCat', body).value;
           it.desc = U.$('#iDesc', body).value.trim();
+          it.badge = U.$('#iBadge', body).value.trim();
+          it.included = U.$$('[data-inc]', body).filter((x) => x.checked).map((x) => x.dataset.inc);
           it.active = U.$('#iActive', body).checked;
           it.allowSugar = U.$('#iSugar', body).checked;
           it.allowIce = U.$('#iIce', body).checked;
@@ -229,7 +235,8 @@ Views.menu = (() => {
       <div class="card flush"><table class="tbl"><thead><tr><th>Topping</th><th class="r">Price</th><th class="r">Cost</th><th class="r">Cost %</th><th>On sale</th></tr></thead>
       <tbody>${Store.S.toppings.map((t) => {
         const cost = Store.toppingCost(t);
-        return `<tr class="click ${t.active ? '' : 'void'}" data-id="${t.id}"><td><b>${U.esc(t.name)}</b></td><td class="r">${U.money(t.price)}</td>
+        const fl = (t.flavours || []);
+        return `<tr class="click ${t.active ? '' : 'void'}" data-id="${t.id}"><td><b>${U.esc(t.name)}</b>${fl.length ? `<br><small class="muted">Flavours: ${fl.map((f) => (f.active === false ? `<s>${U.esc(f.name)}</s>` : U.esc(f.name))).join(', ')}</small>` : ''}</td><td class="r">${U.money(t.price)}</td>
           <td class="r">${U.money(cost, 1)}</td><td class="r">${fcBadge(cost, t.price)}</td>
           <td><label class="switch" data-stop><input type="checkbox" data-toggle="${t.id}" ${t.active ? 'checked' : ''}><span></span></label></td></tr>`;
       }).join('') || '<tr><td class="empty">No toppings yet</td></tr>'}</tbody></table></div>`;
@@ -249,19 +256,57 @@ Views.menu = (() => {
 
   function editTopping(t) {
     const isNew = !t;
-    const tp = t ? JSON.parse(JSON.stringify(t)) : { id: U.uid(), name: '', price: 30, recipe: [], active: true, sort: Store.S.toppings.length };
+    const tp = t ? JSON.parse(JSON.stringify(t)) : { id: U.uid(), name: '', price: 30, recipe: [], flavours: [], active: true, sort: Store.S.toppings.length };
+    tp.flavours = tp.flavours || [];
     const body = document.createElement('div');
     body.innerHTML = `<div class="form-grid">
         <div><label>Name</label><input type="text" id="tName" value="${U.esc(tp.name)}" autofocus></div>
-        <div><label>Price ৳</label><input type="number" id="tPrice" min="0" value="${tp.price}"></div>
+        <div><label>Price ৳ (same for every flavour)</label><input type="number" id="tPrice" min="0" value="${tp.price}"></div>
         <div class="span2"><label class="check"><input type="checkbox" id="tActive" ${tp.active ? 'checked' : ''}> On sale</label></div>
-      </div><h3 class="mt">Recipe (per drink)</h3><div id="tRec"></div><p class="cost-info" id="tCost"></p>`;
+      </div>
+      <h3 class="mt">Flavours <small class="muted">(optional: if any are added, the cashier must pick one)</small></h3>
+      <div id="tFl"></div>
+      <div id="tRecWrap"><h3 class="mt">Recipe (per drink)</h3><div id="tRec"></div></div><p class="cost-info" id="tCost"></p>`;
+    const ingOpts = (sel) => '<option value="">— ingredient —</option>' + Store.S.ingredients.map((i) => `<option value="${i.id}" ${i.id === sel ? 'selected' : ''}>${U.esc(i.name)} (${U.esc(i.unit)})</option>`).join('');
+    const flBox = U.$('#tFl', body);
+    const paintFl = () => {
+      flBox.innerHTML = `<table class="tbl compact"><thead><tr><th>Flavour</th><th>Ingredient used</th><th>Qty</th><th>Available</th><th></th></tr></thead><tbody>${tp.flavours.map((f, i) => `
+        <tr data-fi="${i}"><td><input type="text" data-ff="name" value="${U.esc(f.name)}"></td>
+        <td><select data-ff="ingId">${ingOpts(f.recipe?.[0]?.ingId)}</select></td>
+        <td><input type="number" step="any" min="0" data-ff="qty" value="${f.recipe?.[0]?.qty ?? ''}" style="width:80px"></td>
+        <td><input type="checkbox" data-ff="active" ${f.active !== false ? 'checked' : ''}></td>
+        <td><button type="button" class="icon-btn" data-fdel="${i}">✕</button></td></tr>`).join('')}</tbody></table>
+        <button type="button" class="btn sm ghost" data-fadd>+ Add flavour</button>`;
+      U.$('#tRecWrap', body).hidden = tp.flavours.length > 0;
+    };
+    flBox.addEventListener('input', (e) => {
+      const tr = e.target.closest('[data-fi]');
+      if (!tr) return;
+      const f = tp.flavours[Number(tr.dataset.fi)];
+      const k = e.target.dataset.ff;
+      f.recipe = f.recipe && f.recipe[0] ? f.recipe : [{ ingId: '', qty: 0 }];
+      if (k === 'name') f.name = e.target.value;
+      if (k === 'ingId') f.recipe[0].ingId = e.target.value;
+      if (k === 'qty') f.recipe[0].qty = U.n(e.target.value);
+      if (k === 'active') f.active = e.target.checked;
+      upd();
+    });
+    flBox.addEventListener('click', (e) => {
+      if (e.target.closest('[data-fadd]')) {
+        const q = tp.flavours[0]?.recipe?.[0]?.qty || 30;
+        tp.flavours.push({ id: U.uid(), name: '', active: true, recipe: [{ ingId: '', qty: q }] });
+        paintFl(); upd();
+      }
+      const d = e.target.closest('[data-fdel]');
+      if (d) { tp.flavours.splice(Number(d.dataset.fdel), 1); paintFl(); upd(); }
+    });
     const upd = () => {
-      const c = Store.recipeCost(ed.get());
+      const c = tp.flavours.length ? Store.recipeCost(tp.flavours[0].recipe || []) : Store.recipeCost(ed.get());
       U.$('#tCost', body).innerHTML = `Cost ${U.money(c, 1)} ${fcBadge(c, U.n(U.$('#tPrice', body).value))}`;
     };
     const ed = recipeEditor(U.$('#tRec', body), tp.recipe, upd);
     U.$('#tPrice', body).oninput = upd;
+    paintFl();
     upd();
     U.modal({
       title: isNew ? 'New topping' : `Edit: ${tp.name}`,
@@ -279,6 +324,8 @@ Views.menu = (() => {
           tp.price = U.n(U.$('#tPrice', body).value);
           tp.active = U.$('#tActive', body).checked;
           tp.recipe = ed.get();
+          tp.flavours = tp.flavours.map((f) => ({ ...f, name: f.name.trim(), recipe: (f.recipe || []).filter((r) => r.ingId && U.n(r.qty) > 0) }));
+          if (tp.flavours.some((f) => !f.name)) { U.toast('Give every flavour a name', 'err'); return false; }
           await Store.save('toppings', tp); draw(); return true;
         } },
       ],

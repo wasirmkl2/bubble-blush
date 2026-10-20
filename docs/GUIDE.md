@@ -63,6 +63,9 @@ With the **fast print** shortcut, stickers skip the print window and go to the *
 - Check the low-stock banner. Prepare pearls for the day.
 
 **During service**
+- **Size is required**: tap Medium/Large (or press **1**/**2**). Premium Brown Sugar is Large only and is picked automatically.
+- **Popping Balls / Crystal Balls**: tap the flavour. The flavour is the topping.
+- **Free topping promotion** (Settings → Promotion): while it runs, the most expensive topping the customer adds is free, **one per drink**. Included toppings (Coconut Jelly in the Paradise drinks, Black Pearls in Brown Sugar Milk Tea) are never charged. The bill shows each free topping and a *Promotional Discount* total. It switches off by itself after the *To* date.
 - Every order prints the **customer bill** first. The POS then waits: **tear off the bill**, then press **Enter** (or *Print kitchen copy*) to print the **kitchen copy**. The kitchen copy has a big order number, each drink with size, sugar, ice, toppings and notes, and no prices. If you skip it, print it later with the gold **👩‍🍳 Print** button in the "Making now" bar. Orders → open order → *Kitchen copy* reprints it. If you ever buy a printer with an auto-cutter, go to Settings → Kitchen copy → *Print automatically*.
 - `F2` Sell · `/` search · `Enter` add · `F12` charge · `Esc` close.
 - Ask for the **phone number** at every order. It builds your customer list and the loyalty count (free drink every 10 cups by default).

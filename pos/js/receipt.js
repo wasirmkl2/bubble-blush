@@ -43,13 +43,18 @@ const Receipt = (() => {
     order.lines.forEach((l, i) => {
       if (i) ops.push({ t: 'gap', h: 0.25 });
       ops.push({ t: 'row', l: `${l.qty} × ${l.name} (${l.sizeName})`, r: m(l.basePrice * l.qty), b: true });
-      (l.toppings || []).forEach((tp) => ops.push({ t: 'row', l: `+ ${tp.name}`, r: m(tp.price * l.qty), z: 0.9, i: 1 }));
-      const opts = [l.sugar && `Sugar ${l.sugar}`, l.ice].filter(Boolean).join(' · ');
-      if (opts) ops.push({ t: 'text', s: opts, z: 0.9, i: 1 });
+      if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}`, z: 0.9, i: 1 });
+      if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 0.9, i: 1 });
+      if ((l.included || []).length) ops.push({ t: 'text', s: `Included: ${l.included.join(', ')}`, z: 0.9, i: 1 });
+      (l.toppings || []).forEach((tp, k) => {
+        ops.push({ t: 'row', l: `+ ${tp.name}`, r: m(tp.price * l.qty), z: 0.9, i: 1 });
+        if (l.promo && k === l.promoIndex) ops.push({ t: 'row', l: order.promoName || 'Free topping', r: '-' + m(l.promo * l.qty), z: 0.9, i: 2 });
+      });
       if (l.note) ops.push({ t: 'text', s: `Note: ${l.note}`, z: 0.9, i: 1 });
     });
     ops.push({ t: 'hr' });
     ops.push({ t: 'row', l: 'Subtotal', r: m(order.subtotal) });
+    if (order.promo > 0) ops.push({ t: 'row', l: 'Promotional Discount', r: '-' + m(order.promo) });
     if (order.discount > 0) {
       const d = order.discountInfo || {};
       ops.push({ t: 'row', l: `Discount${d.type === 'pct' ? ` (${d.value}%)` : ''}${d.reason ? ' – ' + d.reason : ''}`, r: '-' + m(order.discount) });
@@ -80,8 +85,10 @@ const Receipt = (() => {
       if (i) ops.push({ t: 'hr' });
       ops.push({ t: 'text', s: `${l.qty} × ${l.name}`, b: true, z: 1.3 });
       ops.push({ t: 'text', s: `Size: ${l.sizeName}`, z: 1.15, i: 1 });
-      if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}`, z: 1.15, i: 1 });
+      const sl = Store.settings.sugarLabels?.[l.sugar];
+      if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}${sl ? ` (${sl})` : ''}`, z: 1.15, i: 1 });
       if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 1.15, i: 1 });
+      if ((l.included || []).length) ops.push({ t: 'text', s: `Included: ${l.included.join(', ')}`, z: 1.15, i: 1 });
       (l.toppings || []).forEach((tp) => ops.push({ t: 'text', s: `+ ${tp.name}`, b: true, z: 1.15, i: 1 }));
       if (l.note) ops.push({ t: 'text', s: `NOTE: ${l.note}`, b: true, z: 1.15, i: 1 });
     });
@@ -103,8 +110,9 @@ const Receipt = (() => {
       { t: 'row', l: 'Orders', r: String(r.orders) },
       { t: 'row', l: 'Cups sold', r: String(r.cups) },
       { t: 'row', l: 'Gross sales', r: m(r.gross) },
-      { t: 'row', l: 'Discounts', r: '-' + m(r.discount) },
     ];
+    if (r.promo) ops.push({ t: 'row', l: `Promotion (${r.promoCups} free toppings)`, r: '-' + m(r.promo) });
+    ops.push({ t: 'row', l: 'Discounts', r: '-' + m(r.discount) });
     if (r.vat) ops.push({ t: 'row', l: 'VAT', r: m(r.vat) });
     ops.push({ t: 'row', l: 'NET SALES', r: m(r.net), b: true, z: 1.3 });
     if (r.voids) ops.push({ t: 'row', l: `Voided (${r.voids})`, r: m(r.voidValue) });
@@ -353,7 +361,7 @@ const Receipt = (() => {
     const p = paper();
     const fs = Math.max(9, Math.min(16, Number(st.receiptFontPx) || 12));
     const e = U.esc;
-    const style = (o) => `font-size:${(o.z || 1).toFixed(2)}em;${o.b ? 'font-weight:700;' : ''}${o.i ? 'padding-left:3mm;' : ''}`;
+    const style = (o) => `font-size:${(o.z || 1).toFixed(2)}em;${o.b ? 'font-weight:700;' : ''}${o.i ? `padding-left:${o.i * 3}mm;` : ''}`;
     const body = ops.map((o) => {
       if (o.t === 'img') return `<img src="${o.src}" style="width:${Math.round(p.mm * (o.w || 0.6))}mm;margin:0 auto 1.5mm;display:block" alt="">`;
       if (o.t === 'text') return `<div style="${style(o)}text-align:${o.a === 'c' ? 'center' : o.a === 'r' ? 'right' : 'left'}">${e(o.s)}</div>`;

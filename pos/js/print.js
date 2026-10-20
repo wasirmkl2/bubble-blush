@@ -91,30 +91,43 @@ const Print = (() => {
 
   function menuHTML() {
     const st = Store.settings;
-    const sizes = st.sizes || [];
+    const sizes = (st.sizes || []).filter((z) => Store.S.items.some((i) => i.active && i.sizes.some((x) => x.sizeId === z.id)));
     const cats = Store.S.categories.map((c) => ({ c, items: Store.S.items.filter((i) => i.catId === c.id && i.active) })).filter((x) => x.items.length);
     const tops = Store.S.toppings.filter((t) => t.active);
+    const sugar = (st.sugarLevels || []).map((v) => (st.sugarLabels?.[v] ? `${v} ${st.sugarLabels[v]}` : v));
     return `<!doctype html><html><head><meta charset="utf-8"><style>${BASE_CSS}
       @page{size:A4;margin:12mm}
       body{color:#2F3E44;font-family:"Segoe UI","Nirmala UI",Arial,sans-serif}
       .hd{text-align:center;margin-bottom:6mm}.hd img{width:42mm;margin:0 auto}
-      .tg{color:#6B7F72;font-size:13px;margin-top:2mm}
+      .tg{color:#6B7F72;font-size:14px;margin-top:2mm;letter-spacing:.5px}
       .cols{columns:2;column-gap:10mm}
       .cat{break-inside:avoid;margin-bottom:6mm}
-      .cat h2{font-size:17px;color:#4E7F87;border-bottom:2px solid #A8C3C9;padding-bottom:1mm;margin-bottom:2mm;letter-spacing:.5px;text-transform:uppercase}
-      .it{display:flex;justify-content:space-between;gap:4mm;padding:1.4mm 0;border-bottom:1px dotted #cfdfe3}
+      .cat h2{display:flex;justify-content:space-between;align-items:flex-end;font-size:17px;color:#4E7F87;border-bottom:2px solid #A8C3C9;padding-bottom:1mm;margin-bottom:2mm;letter-spacing:.5px;text-transform:uppercase}
+      .cat h2 .sz{display:flex;gap:3mm;font-size:10px;color:#6B7F72;letter-spacing:0}
+      .sz span,.pr span{width:13mm;text-align:center}
+      .it{display:flex;justify-content:space-between;gap:4mm;padding:1.6mm 0;border-bottom:1px dotted #cfdfe3}
       .nm{font-weight:700;font-size:13.5px}.ds{font-size:11px;color:#6B7F72}
-      .pr{display:flex;gap:4mm;white-space:nowrap;font-weight:700;font-size:13px;text-align:center}.pr span{min-width:11mm}.pr small{display:block;font-weight:400;color:#6B7F72;font-size:10px}
-      .tops{break-inside:avoid;margin-top:2mm;background:#EFF9FC;border-radius:3mm;padding:3mm 4mm;font-size:12.5px}
+      .bd{display:inline-block;background:#C9A24A;color:#fff;border-radius:3mm;padding:0 2mm;font-size:9.5px;font-weight:700;margin-left:1.5mm;vertical-align:middle}
+      .inc{font-size:10.5px;color:#4F9A6E;font-weight:600}
+      .pr{display:flex;gap:3mm;white-space:nowrap;font-weight:700;font-size:13px}
+      .pr .na{color:#b6c4c8;font-weight:400}
+      .tops{break-inside:avoid;margin-top:2mm;background:#EFF9FC;border-radius:3mm;padding:3mm 4mm;font-size:12px;line-height:1.5}
       .tops b{color:#4E7F87}.ft{text-align:center;color:#6B7F72;font-size:11px;margin-top:6mm}
     </style></head><body>
       <div class="hd"><img src="assets/logo.png" alt=""><div class="tg">${e(st.tagline || '')}</div></div>
-      <div class="cols">${cats.map(({ c, items }) => `<div class="cat"><h2>${e(c.name)}</h2>${items.map((i) => `
-        <div class="it"><div><div class="nm">${e(i.name)}</div><div class="ds">${e(i.desc || '')}</div></div>
-        <div class="pr">${i.sizes.map((s) => `<span>${U.money(s.price)}<small>${e(sizes.find((z) => z.id === s.sizeId)?.name || s.sizeId)}</small></span>`).join('')}</div></div>`).join('')}
+      <div class="cols">${cats.map(({ c, items }) => `<div class="cat"><h2><span>${e(c.name)}</span><span class="sz">${sizes.map((z) => `<span>${e(z.name)}</span>`).join('')}</span></h2>${items.map((i) => {
+        const inc = Store.includedNames(i);
+        return `<div class="it"><div><div class="nm">${e(i.name)}${i.badge ? `<span class="bd">${e(i.badge)}</span>` : ''}</div>
+          ${i.desc ? `<div class="ds">${e(i.desc)}</div>` : ''}${inc.length ? `<div class="inc">Includes ${inc.map(e).join(', ')}</div>` : ''}</div>
+          <div class="pr">${sizes.map((z) => { const x = i.sizes.find((y) => y.sizeId === z.id); return x ? `<span>${U.money(x.price)}</span>` : '<span class="na">—</span>'; }).join('')}</div></div>`;
+      }).join('')}
       </div>`).join('')}
-      ${tops.length ? `<div class="tops"><b>ADD TOPPINGS</b><br>${tops.map((t) => `${e(t.name)} ${U.money(t.price)}`).join(' · ')}</div>` : ''}
-      ${st.sugarLevels?.length ? `<div class="tops"><b>MAKE IT YOURS</b><br>Sugar: ${st.sugarLevels.map(e).join(' / ')}<br>Ice: ${st.iceLevels.map(e).join(' / ')}</div>` : ''}
+      ${tops.length ? `<div class="tops"><b>ADD TOPPINGS</b><br>${tops.map((t) => {
+        const fl = (t.flavours || []).filter((f) => f.active !== false).map((f) => f.name);
+        return `${e(t.name)} <b>${U.money(t.price)}</b>${fl.length ? ` <span style="color:#6B7F72">(${fl.map(e).join(', ')})</span>` : ''}`;
+      }).join('<br>')}</div>` : ''}
+      ${sugar.length ? `<div class="tops"><b>MAKE IT YOURS</b> <span style="color:#6B7F72">(free)</span><br>Sugar: ${sugar.map(e).join(' · ')}<br>Ice: ${(st.iceLevels || []).map(e).join(' · ')}</div>` : ''}
+      ${Store.promoActive() ? `<div class="tops" style="background:#FBF0D9"><b style="color:#9a7420">🎁 ${e(st.promo.name).toUpperCase()}</b><br>Any ONE topping free with every drink!</div>` : ''}
       </div>
       <div class="ft">${e(st.address || '')} ${st.phone ? '· ' + e(st.phone) : ''} ${st.social ? '· ' + e(st.social) : ''}</div>
     </body></html>`;

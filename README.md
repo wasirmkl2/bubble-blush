@@ -14,11 +14,11 @@ Business toolkit for **Bubble Blush**, a bubble tea shop in Khulna, Bangladesh.
 2. Double-click **`Create Desktop Shortcut.bat`** (one time only).
 3. Open **Bubble Blush POS** from the Desktop. It opens as an app window in Microsoft Edge. No internet or installation needed.
 
-The first time it opens, it loads a **demo menu** (20 drinks, 7 toppings, 34 ingredients with Khulna-level prices). Practise with it, then:
+It comes with the **Bubble Blush menu**: 12 drinks in 4 categories, Medium/Large, and 5 toppings (Popping Balls and Crystal Balls with flavours). It also has 5 sugar levels, 3 ice levels, and the **Opening Day Free Topping** promotion. Prices are final. Recipes (grams/ml) and ingredient costs are estimates for stock and profit tracking, so:
 
 - **Inventory** → put in your real supplier pack prices and stock.
-- **Menu & Pricing** → adjust recipes and prices (each drink shows its cost and cost %).
-- **Settings** → shop phone/address, printers, then **Delete test orders & expenses** before the real opening.
+- **Menu & Pricing** → correct each drink's recipe (cost and cost % update automatically).
+- **Settings** → shop phone/address, printers, promotion dates. Then **Delete test orders & expenses** before the real opening.
 
 See **[docs/GUIDE.md](docs/GUIDE.md)** for printer setup and the daily routine.
 

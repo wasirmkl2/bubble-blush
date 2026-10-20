@@ -100,6 +100,17 @@ Views.settings = (() => {
           </div>
           <p class="muted small mt">Business day: sales after midnight but before this hour count for the previous day (useful if you close late).</p></div>
 
+        <div class="card"><h3>🎁 Promotion: free topping</h3>
+          <p class="muted small">One topping free per drink (the most expensive one the customer adds). Toppings included in a drink are always free anyway.</p>
+          <div class="form-grid">
+            <div class="span2"><label class="check"><input type="checkbox" id="pOn" ${s.promo?.enabled ? 'checked' : ''}> Promotion on</label>
+              <span id="pState" class="small"></span></div>
+            <div class="span2"><label>Name (printed on the bill)</label><input type="text" id="pName" value="${U.esc(s.promo?.name || '')}"></div>
+            <div><label>From</label><input type="date" id="pFrom" value="${s.promo?.from || ''}"></div>
+            <div><label>To</label><input type="date" id="pTo" value="${s.promo?.to || ''}"></div>
+          </div>
+          <div class="tools mt"><button class="btn ghost sm" id="pToday" type="button">Today only</button></div></div>
+
         <div class="card"><h3>🔒 Manager PIN</h3>
           <p class="muted">${s.pin ? 'A PIN is set. Menu, Expenses, Reports, Settings and voiding orders need it.' : 'No PIN set. Anyone using the laptop can open every screen. Set a PIN before hiring staff.'}</p>
           <div class="tools"><button class="btn ghost" id="sPin">${s.pin ? 'Change PIN' : 'Set PIN'}</button>${s.pin ? '<button class="btn danger" id="sPinOff">Remove PIN</button>' : ''}</div></div>
@@ -143,6 +154,14 @@ Views.settings = (() => {
     U.$('#sPrRefresh', el).onclick = () => checkHelper(el);
     U.$('[data-k="printMode"]', el).onchange = () => checkHelper(el);
     checkHelper(el);
+    const promoState = () => {
+      const on = U.$('#pOn', el).checked; const f = U.$('#pFrom', el).value; const t = U.$('#pTo', el).value; const d = Store.businessDay();
+      U.$('#pState', el).innerHTML = !on ? '<span class="muted">Off</span>' : (f && t && d >= f && d <= t) ? '<span class="good-text">● Running today</span>'
+        : (f && d < f) ? '<span class="warn-text">Starts ' + U.esc(U.fmtDay(f)) + '</span>' : '<span class="muted">Ended / dates not set</span>';
+    };
+    ['#pOn', '#pFrom', '#pTo'].forEach((k) => { U.$(k, el).onchange = promoState; });
+    U.$('#pToday', el).onclick = () => { U.$('#pFrom', el).value = U.$('#pTo', el).value = Store.businessDay(); U.$('#pOn', el).checked = true; promoState(); };
+    promoState();
     U.$('#sTestS', el).onclick = async () => { if (await save(true)) Print.stickers(sampleOrder()); };
     U.$('#sPin', el).onclick = setPin;
     const off = U.$('#sPinOff', el);
@@ -217,6 +236,10 @@ Views.settings = (() => {
     patch.dayStartHour = Math.max(0, Math.min(6, Math.round(patch.dayStartHour)));
     if (!patch.shopName) patch.shopName = 'Bubble Blush';
     patch.receiptFeed = Math.max(0, Math.min(10, Math.round(patch.receiptFeed)));
+    let from = U.$('#pFrom', root).value; let to = U.$('#pTo', root).value;
+    if (from && to && from > to) [from, to] = [to, from];
+    patch.promo = { enabled: U.$('#pOn', root).checked, name: U.$('#pName', root).value.trim() || 'Free Topping', from, to };
+    if (patch.promo.enabled && (!from || !to)) { U.toast('Set the promotion From and To dates', 'err'); return false; }
     await Store.saveSettings(patch);
     if (!silent) { U.toast('Settings saved'); render(root); }
     return true;

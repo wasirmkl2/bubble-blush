@@ -164,7 +164,7 @@ Views.inventory = (() => {
       actions: [
         ...(!isNew ? [{ label: 'Delete', cls: 'danger', left: true, onClick: async () => {
           const used = Store.S.items.some((i) => i.sizes.some((s) => s.recipe.some((r) => r.ingId === it.id))) ||
-            Store.S.toppings.some((t) => t.recipe.some((r) => r.ingId === it.id)) ||
+            Store.S.toppings.some((t) => t.recipe.some((r) => r.ingId === it.id) || (t.flavours || []).some((f) => (f.recipe || []).some((r) => r.ingId === it.id))) ||
             Store.settings.sizes.some((s) => (s.packaging || []).some((r) => r.ingId === it.id));
           if (used) { U.toast('This ingredient is used in a recipe — remove it from recipes first', 'err', 4000); return false; }
           if (!(await U.confirm(`Delete <b>${U.esc(it.name)}</b>?`, { ok: 'Delete', danger: true }))) return false;
