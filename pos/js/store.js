@@ -92,6 +92,15 @@ const Store = (() => {
         await api.saveSettings({ schema: 2, paperWidth: 58, printMode: 'direct' });
       }
       if ((saved.schema || 1) < 3) await migrateToFinalMenu();
+      // v4: opening offer extended to Wed 21 & Thu 22 Oct 2026 (only ever lengthens it).
+      if ((saved.schema || 1) < 4) {
+        const p = S.settings.promo || {};
+        const END = '2026-10-22';
+        await api.saveSettings({
+          schema: 4,
+          promo: { ...p, enabled: true, from: p.from && p.from < '2026-10-21' ? p.from : '2026-10-21', to: p.to && p.to > END ? p.to : END },
+        });
+      }
     },
     reload: loadAll,
     onChange(fn) { S.listeners.push(fn); },

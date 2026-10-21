@@ -22,7 +22,7 @@ const Seed = (() => {
     marginBottomMm: 16,       // blank paper after the last line, so tearing never cuts text (mm)
     receiptCut: false,        // send a cut command (only for printers with an auto-cutter)
     openDrawer: false,        // kick a cash drawer connected to the bill printer
-    schema: 3,
+    schema: 4,
     receiptLogo: true,
     receiptFontPx: 12,
     stickersEnabled: true,
