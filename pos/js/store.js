@@ -131,6 +131,8 @@ const Store = (() => {
     },
     toppingCost(t, flavourId) { return api.recipeCost(api.toppingRecipe(t, flavourId)); },
     includedNames(item) { return (item?.included || []).map((id) => S.topping[id]?.name).filter(Boolean); },
+    /* Included toppings for an order line: saved on the order, or (older orders) from the drink's current setup. */
+    lineIncluded(l) { return (l.included && l.included.length) ? l.included : api.includedNames(S.item[l.itemId]); },
 
     /* ---------- promotion: one free topping per drink ---------- */
     promoActive(day = api.businessDay()) {

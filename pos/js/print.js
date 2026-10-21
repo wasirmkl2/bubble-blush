@@ -24,7 +24,7 @@ const Print = (() => {
         k++;
         if (onlyLineIndex !== null && idx !== onlyLineIndex) continue;
         const opts = [l.sizeName, l.sugar ? `Sugar ${l.sugar}` : '', l.ice].filter(Boolean).join(' · ');
-        const tops = (l.toppings || []).map((t) => t.name).join(', ');
+        const tops = [...Store.lineIncluded(l), ...(l.toppings || []).map((t) => t.name)].join(', ');
         labels.push(`<div class="lb">
           <div class="top"><span class="no">#${order.no}</span><span>${k}/${total} · ${U.fmtTime(order.at)}</span></div>
           <div class="nm">${e(l.name)}</div>

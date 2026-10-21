@@ -45,7 +45,8 @@ const Receipt = (() => {
       ops.push({ t: 'row', l: `${l.qty} × ${l.name} (${l.sizeName})`, r: m(l.basePrice * l.qty), b: true });
       if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}`, z: 0.9, i: 1 });
       if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 0.9, i: 1 });
-      if ((l.included || []).length) ops.push({ t: 'text', s: `Included: ${l.included.join(', ')}`, z: 0.9, i: 1 });
+      const inc = Store.lineIncluded(l);
+      if (inc.length) ops.push({ t: 'text', s: `Included: ${inc.join(', ')}`, z: 0.9, i: 1 });
       (l.toppings || []).forEach((tp, k) => {
         ops.push({ t: 'row', l: `+ ${tp.name}`, r: m(tp.price * l.qty), z: 0.9, i: 1 });
         if (l.promo && k === l.promoIndex) ops.push({ t: 'row', l: order.promoName || 'Free topping', r: '-' + m(l.promo * l.qty), z: 0.9, i: 2 });
@@ -88,7 +89,8 @@ const Receipt = (() => {
       const sl = Store.settings.sugarLabels?.[l.sugar];
       if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}${sl ? ` (${sl})` : ''}`, z: 1.15, i: 1 });
       if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 1.15, i: 1 });
-      if ((l.included || []).length) ops.push({ t: 'text', s: `Included: ${l.included.join(', ')}`, z: 1.15, i: 1 });
+      // Included toppings are part of the drink: print them like toppings so they are not missed.
+      Store.lineIncluded(l).forEach((n) => ops.push({ t: 'text', s: `+ ${n} (included)`, b: true, z: 1.15, i: 1 }));
       (l.toppings || []).forEach((tp) => ops.push({ t: 'text', s: `+ ${tp.name}`, b: true, z: 1.15, i: 1 }));
       if (l.note) ops.push({ t: 'text', s: `NOTE: ${l.note}`, b: true, z: 1.15, i: 1 });
     });
