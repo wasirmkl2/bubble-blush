@@ -24,8 +24,10 @@ Views.reports = (() => {
   }
 
   function summarize(orders, expenses, moves) {
-    const paid = orders.filter((o) => o.status !== 'void');
+    // Sales count only paid orders. "Kitchen first, pay later" orders count once they are paid.
+    const paid = orders.filter((o) => o.status !== 'void' && o.status !== 'unpaid');
     const voids = orders.filter((o) => o.status === 'void');
+    const unpaid = orders.filter((o) => o.status === 'unpaid');
     const r = {
       orders: paid.length,
       cups: U.sum(paid, (o) => o.cups),
@@ -38,6 +40,8 @@ Views.reports = (() => {
       cogs: U.round(U.sum(paid, (o) => o.cost)),
       voids: voids.length,
       voidValue: U.sum(voids, (o) => o.total),
+      unpaid: unpaid.length,
+      unpaidValue: U.sum(unpaid, (o) => o.total),
       discountedOrders: paid.filter((o) => o.discount > 0).length,
     };
     r.net = r.collected;
@@ -210,6 +214,7 @@ Views.reports = (() => {
           <div class="tot-row muted"><span>Stock purchased (cash spent on stock)</span><span>${U.money(r.stockPurchased)}</span></div>
           <div class="tot-row muted"><span>Waste &amp; staff drinks</span><span>${U.money(r.wasteValue)}</span></div>
           ${r.voids ? `<div class="tot-row muted"><span>Voided orders (${r.voids})</span><span>${U.money(r.voidValue)}</span></div>` : ''}
+          ${r.unpaid ? `<div class="tot-row err"><span>Not paid yet (${r.unpaid}) · not in sales</span><span>${U.money(r.unpaidValue)}</span></div>` : ''}
         </div>
         ${!single && nDays >= 7 ? `<div class="card"><h3>📅 Weekdays <small class="muted">avg per day</small></h3>${bars(r.weekdays.filter((w) => w.days.size), (w) => WD[w.i], (w) => w.sales / w.days.size)}</div>` : ''}
         <div class="card"><h3>💙 Customers</h3>
@@ -239,7 +244,8 @@ Views.reports = (() => {
     const md = U.modal({
       title: `🔒 Close the day — ${U.fmtDay(day)}`,
       wide: true,
-      body: `<div class="form-grid">
+      body: `${r.unpaid ? `<div class="banner low">💰 ${r.unpaid} order${r.unpaid === 1 ? ' is' : 's are'} not paid yet (${U.money(r.unpaidValue)}). Take the payment from <b>Orders</b> first, or void ${r.unpaid === 1 ? 'it' : 'them'}.</div>` : ''}
+        <div class="form-grid">
           <div><label>Opening cash in drawer (morning float) ৳</label><input type="number" id="dcOpen" min="0" step="any" value="${prev.openingCash ?? ''}" autofocus></div>
           <div><label>Cash counted now ৳</label><input type="number" id="dcCount" min="0" step="any" value="${prev.countedCash ?? ''}"></div>
           <div class="span2"><label>Note</label><input type="text" id="dcNote" value="${U.esc(prev.note || '')}" placeholder="Anything unusual today?"></div>

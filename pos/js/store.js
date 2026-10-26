@@ -101,6 +101,11 @@ const Store = (() => {
           promo: { ...p, enabled: true, from: p.from && p.from < '2026-10-21' ? p.from : '2026-10-21', to: p.to && p.to > END ? p.to : END },
         });
       }
+      // v5: opening offer is over → promotion off. Cup stickers open the Edge print window
+      // (no label printer at the counter), so they are no longer ticked by default.
+      if ((saved.schema || 1) < 5) {
+        await api.saveSettings({ schema: 5, promo: { ...(S.settings.promo || {}), enabled: false }, printStickerDefault: false });
+      }
     },
     reload: loadAll,
     onChange(fn) { S.listeners.push(fn); },
@@ -207,7 +212,8 @@ const Store = (() => {
       return today.reduce((m, o) => Math.max(m, o.no || 0), 0) + 1;
     },
 
-    async placeOrder({ lines, discount, orderType, customerName, customerPhone, payMethod, received, note }) {
+    /* payLater: the drinks go to the kitchen now, payment is taken later (status 'unpaid'). */
+    async placeOrder({ lines, discount, orderType, customerName, customerPhone, payMethod, received, note, payLater = false }) {
       const now = new Date();
       const dayKey = api.businessDay(now);
       const promoOn = api.promoActive(dayKey);
@@ -258,10 +264,10 @@ const Store = (() => {
         vatMode: S.settings.vatMode,
         total: t.total,
         cost: U.round(U.sum(orderLines, (l) => l.cost)),
-        payMethod: payMethod || 'Cash',
-        received: payMethod === 'Cash' ? Math.max(U.n(received), t.total) : t.total,
-        change: payMethod === 'Cash' ? Math.max(0, U.n(received) - t.total) : 0,
-        status: 'paid',
+        payMethod: payLater ? '' : (payMethod || 'Cash'),
+        received: payLater ? 0 : payMethod === 'Cash' ? Math.max(U.n(received), t.total) : t.total,
+        change: !payLater && payMethod === 'Cash' ? Math.max(0, U.n(received) - t.total) : 0,
+        status: payLater ? 'unpaid' : 'paid',
         ready: false,
         usage,
       };
@@ -309,6 +315,23 @@ const Store = (() => {
       return order;
     },
 
+    /* Take payment for an order that was sent to the kitchen first. */
+    async payOrder(order, { payMethod, received, ref, customerName, customerPhone }) {
+      if (order.status !== 'unpaid') throw new Error(`Order #${order.no} is not waiting for payment`);
+      const pm = payMethod || 'Cash';
+      order.status = 'paid';
+      order.paidAt = new Date().toISOString();
+      order.payMethod = pm;
+      order.received = pm === 'Cash' ? Math.max(U.n(received), order.total) : order.total;
+      order.change = pm === 'Cash' ? Math.max(0, U.n(received) - order.total) : 0;
+      if (customerName !== undefined) order.customerName = (customerName || '').trim();
+      if (customerPhone !== undefined) order.customerPhone = (customerPhone || '').replace(/\s+/g, '');
+      if (ref) order.note = [order.note, `TrxID: ${ref}`].filter(Boolean).join(' · ');
+      await DB.put('orders', order);
+      api.changed('orders');
+      return order;
+    },
+
     async markKitchenPrinted(order) {
       order.kitchenAt = new Date().toISOString();
       await DB.put('orders', order);
@@ -326,10 +349,10 @@ const Store = (() => {
     expensesBetween(fromDay, toDay) { return DB.byRange('expenses', 'dayKey', fromDay, toDay); },
     movesBetween(fromDay, toDay) { return DB.byRange('stockMoves', 'dayKey', fromDay, toDay); },
 
-    async customerStats(phone) {
+    async customerStats(phone, excludeOrderId = null) {
       const p = (phone || '').replace(/\s+/g, '');
       if (p.length < 6) return null;
-      const orders = (await DB.byIndex('orders', 'customerPhone', p)).filter((o) => o.status !== 'void');
+      const orders = (await DB.byIndex('orders', 'customerPhone', p)).filter((o) => o.status !== 'void' && o.id !== excludeOrderId);
       if (!orders.length) return { visits: 0, cups: 0, spent: 0, name: '' };
       orders.sort((a, b) => a.at.localeCompare(b.at));
       return {

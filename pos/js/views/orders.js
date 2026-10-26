@@ -36,12 +36,15 @@ Views.orders = (() => {
   }
 
   function draw() {
-    const paid = orders.filter((o) => o.status !== 'void');
+    const live = orders.filter((o) => o.status !== 'void');
+    const paid = live.filter((o) => o.status !== 'unpaid');
+    const unpaid = live.filter((o) => o.status === 'unpaid');
     U.$('#oStats', root).innerHTML = [
-      ['Orders', paid.length],
-      ['Cups', U.sum(paid, (o) => o.cups)],
+      ['Orders', live.length],
+      ['Cups', U.sum(live, (o) => o.cups)],
       ['Sales', U.money(U.sum(paid, (o) => o.total))],
-      ['Voided', orders.length - paid.length],
+      ...(unpaid.length ? [['Not paid yet', `${unpaid.length} · ${U.money(U.sum(unpaid, (o) => o.total))}`]] : []),
+      ['Voided', orders.length - live.length],
     ].map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
     const s = q.trim().toLowerCase();
     const list = orders.filter((o) => !s || String(o.no) === s.replace('#', '') ||
@@ -56,7 +59,7 @@ Views.orders = (() => {
         <td class="wrap">${o.lines.map((l) => `${l.qty}× ${U.esc(l.name)} <small>(${U.esc(l.sizeName)})</small>`).join(', ')}</td>
         <td>${U.esc(o.orderType)}</td>
         <td>${U.esc(o.customerName || '')}${o.customerPhone ? `<br><small>${U.esc(o.customerPhone)}</small>` : ''}</td>
-        <td>${U.esc(o.payMethod)}</td>
+        <td>${o.status === 'unpaid' ? '<span class="badge out">Not paid</span>' : U.esc(o.payMethod)}</td>
         <td class="r"><b>${U.money(o.total)}</b>${o.discount ? `<br><small class="muted">-${U.money(o.discount)} disc.</small>` : ''}</td>
         <td>${o.status === 'void' ? '<span class="badge out">Void</span>' : o.ready ? '<span class="badge ok">Served</span>' : '<span class="badge low">Making</span>'}</td>
       </tr>`).join('')}</tbody>`;
@@ -81,7 +84,8 @@ Views.orders = (() => {
       wide: true,
       body: `
         ${o.status === 'void' ? `<div class="banner low">Voided ${U.fmtDateTime(o.voidAt)}${o.voidReason ? ' — ' + U.esc(o.voidReason) : ''}${o.restocked ? ' (stock returned)' : ''}</div>` : ''}
-        <div class="kv"><span>Type</span><b>${U.esc(o.orderType)}</b><span>Payment</span><b>${U.esc(o.payMethod)}</b>
+        ${o.status === 'unpaid' ? '<div class="banner warn">💰 Not paid yet: the kitchen copy went first. Press <b>Take payment</b> when the customer pays.</div>' : ''}
+        <div class="kv"><span>Type</span><b>${U.esc(o.orderType)}</b><span>Payment</span><b>${o.status === 'unpaid' ? 'Not paid yet' : U.esc(o.payMethod)}</b>
           ${o.customerName || o.customerPhone ? `<span>Customer</span><b>${U.esc(o.customerName)} ${U.esc(o.customerPhone)}</b>` : ''}
           ${o.note ? `<span>Note</span><b>${U.esc(o.note)}</b>` : ''}</div>
         <table class="tbl compact">${lines}</table>
@@ -91,15 +95,17 @@ Views.orders = (() => {
           ${o.discount ? `<div class="tot-row disc"><span>Discount ${o.discountInfo?.reason ? '· ' + U.esc(o.discountInfo.reason) : ''}</span><span>-${U.money(o.discount)}</span></div>` : ''}
           ${o.vat ? `<div class="tot-row"><span>VAT</span><span>${U.money(o.vat)}</span></div>` : ''}
           <div class="tot-row grand"><span>Total</span><span>${U.money(o.total)}</span></div>
-          ${o.payMethod === 'Cash' ? `<div class="tot-row muted"><span>Received / change</span><span>${U.money(o.received)} / ${U.money(o.change)}</span></div>` : ''}
+          ${o.status !== 'unpaid' && o.payMethod === 'Cash' ? `<div class="tot-row muted"><span>Received / change</span><span>${U.money(o.received)} / ${U.money(o.change)}</span></div>` : ''}
           <div class="tot-row muted"><span>Ingredient cost (est.)</span><span>${U.money(o.cost)} · margin ${U.pct(margin)}</span></div>
         </div>`,
       actions: [
         ...(o.status !== 'void' ? [{ label: 'Void order', cls: 'danger', left: true, onClick: () => voidFlow(o) }] : []),
         ...(o.status !== 'void' ? [{ label: o.ready ? 'Mark making' : 'Mark served', onClick: async () => { await Store.setReady(o, !o.ready); draw(); } }] : []),
         ...(Store.settings.stickersEnabled ? [{ label: '🏷 All stickers', onClick: () => { Print.stickers(o); return false; } }] : []),
-        { label: '👩‍🍳 Kitchen copy', onClick: async () => { await Print.kitchen(o, { reprint: !!o.kitchenAt }); await Store.markKitchenPrinted(o); return false; } },
-        { label: '🧾 Reprint bill', cls: 'primary', onClick: () => { Print.receipt(o, { reprint: true }); return false; } },
+        { label: '👩‍🍳 Kitchen copy', onClick: async () => { const r = await Print.kitchen(o, { reprint: !!o.kitchenAt }); if (r && r.ok) await Store.markKitchenPrinted(o); return false; } },
+        ...(o.status === 'unpaid'
+          ? [{ label: '💰 Take payment', cls: 'primary', onClick: () => { Views.pos.takePayment(o, () => draw()); } }]
+          : [{ label: '🧾 Reprint bill', cls: 'primary', onClick: () => { Print.receipt(o, { reprint: true }); return false; } }]),
       ],
     });
     md.el.addEventListener('click', (e) => {

@@ -15,6 +15,9 @@ Views.pos = (() => {
     try { return { ...emptyCart(), ...JSON.parse(localStorage.getItem(CART_KEY) || '{}') }; } catch { return emptyCart(); }
   }
   function saveCart() { localStorage.setItem(CART_KEY, JSON.stringify(cart)); }
+  function initPrintPrefs() {
+    printPrefs = { receipt: !!st().printReceiptDefault, kitchen: st().printKitchenDefault !== false, sticker: !!st().printStickerDefault };
+  }
 
   const st = () => Store.settings;
   const priceRange = (item) => item.sizes.map((s) => {
@@ -30,7 +33,7 @@ Views.pos = (() => {
     cart = loadCart();
     if (!st().orderTypes.includes(cart.orderType)) cart.orderType = null;
     if (!cart.orderType) cart.orderType = st().orderTypes[0] || 'Takeaway';
-    if (!printPrefs) printPrefs = { receipt: !!st().printReceiptDefault, kitchen: st().printKitchenDefault !== false, sticker: !!st().printStickerDefault };
+    initPrintPrefs();
     el.innerHTML = `
       <div class="pos">
         <section class="pos-menu">
@@ -294,7 +297,7 @@ Views.pos = (() => {
         actions: [{ label: 'Cancel' }, { label: 'Save', cls: 'primary', onClick: (m) => { cart.note = U.$('#ordNote', m.el).value.trim(); saveCart(); renderCart(); } }],
       });
     };
-    U.$('#cartPay', box).onclick = openPay;
+    U.$('#cartPay', box).onclick = () => openPay();
   }
 
   function resetCart() {
@@ -340,14 +343,18 @@ Views.pos = (() => {
   }
 
   /* ---------- payment ---------- */
-  function openPay() {
-    if (!cart.lines.length) return;
-    const t = Store.totals(cart.lines, cart.discount);
+  /* Payment window. `existing` = an order already sent to the kitchen ("Kitchen first, pay later"). */
+  function openPay(existing = null, onPaid = null) {
+    if (!existing && !cart.lines.length) return;
+    const t = existing ? { total: existing.total, cups: existing.cups } : Store.totals(cart.lines, cart.discount);
     let method = st().payMethods[0] || 'Cash';
     const quick = [...new Set([t.total, Math.ceil(t.total / 100) * 100, Math.ceil(t.total / 500) * 500, 1000].filter((v) => v >= t.total))].slice(0, 4);
+    const name0 = existing ? existing.customerName : cart.customerName;
+    const phone0 = existing ? existing.customerPhone : cart.customerPhone;
     const body = document.createElement('div');
     body.className = 'pay-body';
     body.innerHTML = `
+      ${existing ? `<div class="banner warn">👩‍🍳 Kitchen copy for <b>#${existing.no}</b> was printed at ${U.fmtTime(existing.kitchenAt || existing.at)}. Take the payment now.</div>` : ''}
       <div class="pay-total"><span>Total to pay</span><b>${U.money(t.total)}</b></div>
       <div class="opt-group"><label>Payment</label>${U.seg('pm', st().payMethods, method)}</div>
       <div class="opt-group" id="cashBox"><label>Cash received</label>
@@ -357,20 +364,26 @@ Views.pos = (() => {
       </div>
       <div class="opt-group" id="refBox" hidden><label>Transaction ID (optional)</label><input type="text" id="payRef" placeholder="bKash / Nagad TrxID"></div>
       <div class="opt-group two">
-        <div><label>Customer name (optional)</label><input type="text" id="custName" value="${U.esc(cart.customerName)}"></div>
-        <div><label>Phone (optional)</label><input type="tel" id="custPhone" value="${U.esc(cart.customerPhone)}" placeholder="01XXXXXXXXX"></div>
+        <div><label>Customer name (optional)</label><input type="text" id="custName" value="${U.esc(name0)}"></div>
+        <div><label>Phone (optional)</label><input type="tel" id="custPhone" value="${U.esc(phone0)}" placeholder="01XXXXXXXXX"></div>
       </div>
       <div class="loyal" id="loyal"></div>
       <div class="print-opts">
         <label class="check"><input type="checkbox" id="prReceipt" ${printPrefs.receipt ? 'checked' : ''}> 🧾 Customer bill</label>
+        ${existing ? '<span class="muted small" style="align-self:center">✓ Kitchen copy already printed (tear it off before the bill prints)</span>' : `
         <label class="check"><input type="checkbox" id="prKitchen" ${printPrefs.kitchen ? 'checked' : ''}> 👩‍🍳 Kitchen copy</label>
-        ${st().stickersEnabled ? `<label class="check"><input type="checkbox" id="prSticker" ${printPrefs.sticker ? 'checked' : ''}> 🏷 Print cup stickers (${t.cups})</label>` : ''}
-      </div>`;
+        ${st().stickersEnabled ? `<label class="check" title="Cup stickers use the Edge print window"><input type="checkbox" id="prSticker" ${printPrefs.sticker ? 'checked' : ''}> 🏷 Cup stickers (${t.cups}) <small class="muted">· print window</small></label>` : ''}`}
+      </div>
+      ${existing ? '' : '<p class="muted small mt">Customer still paying? Press <b>👩‍🍳 Kitchen first, pay later</b>: the kitchen copy prints now and you take the payment from the “Making now” bar.</p>'}`;
     const md = U.modal({
-      title: `Payment · ${cart.orderType}`,
+      title: existing ? `Payment · Order #${existing.no}` : `Payment · ${cart.orderType}`,
       body,
       wide: true,
-      actions: [{ label: 'Back' }, { label: '✓ Complete order', cls: 'primary big', onClick: () => complete() }],
+      actions: [
+        ...(existing ? [] : [{ label: '👩‍🍳 Kitchen first, pay later', cls: 'gold', left: true, onClick: () => payLater() }]),
+        { label: 'Back' },
+        { label: existing ? '✓ Paid' : '✓ Complete order', cls: 'primary big', onClick: () => complete() },
+      ],
     });
     const cashIn = U.$('#cashIn', body);
     const updateChange = () => {
@@ -392,7 +405,7 @@ Views.pos = (() => {
     const phone = U.$('#custPhone', body);
     const lookup = U.debounce(async () => {
       const box = U.$('#loyal', body);
-      const s = await Store.customerStats(phone.value);
+      const s = await Store.customerStats(phone.value, existing ? existing.id : null);
       if (!s) { box.innerHTML = ''; return; }
       if (!s.visits) { box.innerHTML = '🌱 New customer — welcome them!'; return; }
       if (s.name && !U.$('#custName', body).value) U.$('#custName', body).value = s.name;
@@ -412,13 +425,20 @@ Views.pos = (() => {
       if (e.key === 'Enter') { e.preventDefault(); md.el.querySelector('.modal-actions .primary').click(); }
     });
 
+    const readPrintPrefs = () => {
+      printPrefs.receipt = !!U.$('#prReceipt', body)?.checked;
+      if (existing) return;
+      printPrefs.sticker = !!U.$('#prSticker', body)?.checked;
+      printPrefs.kitchen = !!U.$('#prKitchen', body)?.checked;
+    };
+
     async function complete() {
       const received = method === 'Cash' ? (cashIn.value ? U.n(cashIn.value) : t.total) : t.total;
       if (method === 'Cash' && received < t.total) { U.toast('Cash received is less than the total', 'err'); cashIn.focus(); return false; }
-      printPrefs.receipt = !!U.$('#prReceipt', body)?.checked;
-      printPrefs.sticker = !!U.$('#prSticker', body)?.checked;
-      printPrefs.kitchen = !!U.$('#prKitchen', body)?.checked;
+      readPrintPrefs();
+      rememberPrintPrefs();
       const ref = U.$('#payRef', body)?.value.trim();
+      if (existing) return completeExisting(received, ref);
       let order;
       try {
         order = await Store.placeOrder({
@@ -452,11 +472,78 @@ Views.pos = (() => {
       }
       return true;
     }
+
+    async function completeExisting(received, ref) {
+      try {
+        await Store.payOrder(existing, {
+          payMethod: method, received, ref, customerName: U.$('#custName', body).value, customerPhone: phone.value,
+        });
+      } catch (err) {
+        console.error(err);
+        U.toast('Could not save the payment: ' + (err.message || err), 'err', 6000);
+        return false;
+      }
+      md.close();
+      renderQueue();
+      showDone(existing);
+      if (onPaid) { try { onPaid(existing); } catch (e) { console.error(e); } }
+      if (printPrefs.receipt) await Print.receipt(existing);
+      return true;
+    }
+
+    /* Kitchen first: save the order as not paid yet, print the kitchen copy now. */
+    async function payLater() {
+      readPrintPrefs();
+      rememberPrintPrefs();
+      let order;
+      try {
+        order = await Store.placeOrder({
+          lines: cart.lines,
+          discount: cart.discount,
+          orderType: cart.orderType,
+          customerName: U.$('#custName', body).value,
+          customerPhone: phone.value,
+          note: cart.note,
+          payLater: true,
+        });
+      } catch (err) {
+        console.error(err);
+        await Store.reload();
+        U.toast('Could not save the order: ' + (err.message || err), 'err', 6000);
+        return false;
+      }
+      md.close();
+      resetCart();
+      renderGrid();
+      renderQueue();
+      App.banners();
+      U.toast(`#${order.no} sent to the kitchen. Take ${U.money(order.total)} from the “Making now” bar when the customer pays.`, 'ok', 5000);
+      await printKitchen(order);
+      if (printPrefs.sticker && st().stickersEnabled) await Print.stickers(order);
+      return true;
+    }
+  }
+
+  /* Keep the payment-window ticks as the new defaults, so they don't reset when the POS restarts. */
+  function rememberPrintPrefs() {
+    const s = st();
+    const patch = {};
+    if (!!s.printReceiptDefault !== printPrefs.receipt) patch.printReceiptDefault = printPrefs.receipt;
+    if ((s.printKitchenDefault !== false) !== printPrefs.kitchen) patch.printKitchenDefault = printPrefs.kitchen;
+    if (!!s.printStickerDefault !== printPrefs.sticker) patch.printStickerDefault = printPrefs.sticker;
+    if (Object.keys(patch).length) Store.saveSettings(patch).catch((e) => console.error(e));
+  }
+
+  /* Called from the Orders screen. */
+  function takePayment(order, done) {
+    if (!order || order.status !== 'unpaid') return;
+    initPrintPrefs();
+    openPay(order, done);
   }
 
   async function printKitchen(order) {
-    await Print.kitchen(order, { reprint: !!order.kitchenAt });
-    await Store.markKitchenPrinted(order);
+    const r = await Print.kitchen(order, { reprint: !!order.kitchenAt });
+    if (r && r.ok) await Store.markKitchenPrinted(order);
     renderQueue();
   }
 
@@ -488,17 +575,20 @@ Views.pos = (() => {
 
   /* ---------- queue of drinks being made ---------- */
   async function renderQueue() {
+    if (!root) return;
     const box = U.$('#posQueue', root);
     if (!box) return;
     const today = await DB.byIndex('orders', 'dayKey', Store.businessDay());
-    const pending = today.filter((o) => o.status === 'paid' && !o.ready).sort((a, b) => a.no - b.no);
+    // Unpaid orders stay here until they are paid, even after the drinks are ready.
+    const pending = today.filter((o) => (o.status === 'paid' && !o.ready) || o.status === 'unpaid').sort((a, b) => a.no - b.no);
     if (!pending.length) { box.innerHTML = ''; box.hidden = true; return; }
     box.hidden = false;
     box.innerHTML = `<span class="q-title">Making now</span>${pending.map((o) => `
-      <div class="q-chip" title="${U.esc(o.lines.map((l) => `${l.qty}× ${l.name}`).join(', '))}">
+      <div class="q-chip ${o.status === 'unpaid' ? 'unpaid' : ''}" title="${U.esc(o.lines.map((l) => `${l.qty}× ${l.name}`).join(', '))}">
         <b>#${o.no}</b><span>${o.cups} cup${o.cups === 1 ? '' : 's'}${o.customerName ? ' · ' + U.esc(o.customerName) : ''}</span>
         <button class="btn sm ${o.kitchenAt ? 'ghost' : 'gold'}" data-kitchen="${o.id}" title="${o.kitchenAt ? 'Reprint kitchen copy' : 'Kitchen copy not printed yet: print it'}">👩‍🍳${o.kitchenAt ? '' : ' Print'}</button>
-        <button class="btn sm primary" data-ready="${o.id}">Ready ✓</button>
+        ${o.status === 'unpaid' ? `<button class="btn sm gold" data-pay="${o.id}" title="Not paid yet: take the payment and print the bill">💰 Pay ${U.money(o.total)}</button>` : ''}
+        ${o.ready ? '<span class="badge ok">Ready</span>' : `<button class="btn sm primary" data-ready="${o.id}">Ready ✓</button>`}
       </div>`).join('')}`;
     box.onclick = async (e) => {
       const k = e.target.closest('[data-kitchen]');
@@ -507,14 +597,20 @@ Views.pos = (() => {
         await printKitchen(pending.find((x) => x.id === k.dataset.kitchen));
         return;
       }
+      const p = e.target.closest('[data-pay]');
+      if (p) {
+        initPrintPrefs();
+        openPay(pending.find((x) => x.id === p.dataset.pay));
+        return;
+      }
       const b = e.target.closest('[data-ready]');
       if (!b) return;
       const o = pending.find((x) => x.id === b.dataset.ready);
       await Store.setReady(o, true);
-      U.toast(`Order #${o.no} is ready — call the customer!`);
+      U.toast(o.status === 'unpaid' ? `Order #${o.no} is ready — collect ${U.money(o.total)} (not paid yet)` : `Order #${o.no} is ready — call the customer!`);
       renderQueue();
     };
   }
 
-  return { render, hide };
+  return { render, hide, takePayment };
 })();

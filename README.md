@@ -14,7 +14,7 @@ Business toolkit for **Bubble Blush**, a bubble tea shop in Khulna, Bangladesh.
 2. Double-click **`Create Desktop Shortcut.bat`** (one time only).
 3. Open **Bubble Blush POS** from the Desktop. It opens as an app window in Microsoft Edge. No internet or installation needed.
 
-It comes with the **Bubble Blush menu**: 12 drinks in 4 categories, Medium/Large, and 5 toppings (Popping Balls and Crystal Balls with flavours). It also has 5 sugar levels, 3 ice levels, and the **Opening Day Free Topping** promotion. Prices are final. Recipes (grams/ml) and ingredient costs are estimates for stock and profit tracking, so:
+It comes with the **Bubble Blush menu**: 12 drinks in 4 categories, Medium/Large, and 5 toppings (Popping Balls and Crystal Balls with flavours). It also has 5 sugar levels, 3 ice levels, and a free-topping promotion (the opening offer has ended, so it is off). Prices are final. Recipes (grams/ml) and ingredient costs are estimates for stock and profit tracking, so:
 
 - **Inventory** → put in your real supplier pack prices and stock.
 - **Menu & Pricing** → correct each drink's recipe (cost and cost % update automatically).
@@ -25,7 +25,7 @@ See **[docs/GUIDE.md](docs/GUIDE.md)** for printer setup and the daily routine.
 ### What it does
 
 - **Sell**: tap drinks, then pick size, sugar, ice, toppings, and notes. Discounts, Cash/bKash/Nagad/Card, change calculator, customer phone with loyalty count, and a "making now" queue with *Ready* buttons.
-- **Printing**: the 58/80 mm **bill** prints directly to the receipt printer with no print window, and the paper stops right after the bill. Tear it off, press Enter, and a **kitchen copy** prints (drinks, sugar/ice, toppings, notes, no prices). Optional **cup stickers** (one per cup, any label size), plus an A4 **menu card**.
+- **Printing**: the 58/80 mm **bill** prints directly to the receipt printer with no print window, and the paper stops right after the bill. Tear it off, press Enter, and a **kitchen copy** prints (drinks, sugar/ice, toppings, notes, no prices). Customer still paying? **Kitchen first, pay later** prints the kitchen copy now and the bill when they pay. Optional **cup stickers** (one per cup, any label size), plus an A4 **menu card**.
 - **Inventory**: stock goes down automatically with every drink sold. You get low-stock alerts, purchases (with average cost), waste/staff drinks, stock counts, and a WhatsApp-ready shopping list.
 - **Menu & Pricing**: recipe costing per size (packaging included), cost %, profit per cup, and a suggested price for your target.
 - **Expenses**: rent, salary, bills, and other costs, so profit is real profit.

@@ -22,7 +22,7 @@ const Seed = (() => {
     marginBottomMm: 16,       // blank paper after the last line, so tearing never cuts text (mm)
     receiptCut: false,        // send a cut command (only for printers with an auto-cutter)
     openDrawer: false,        // kick a cash drawer connected to the bill printer
-    schema: 4,
+    schema: 5,
     receiptLogo: true,
     receiptFontPx: 12,
     stickersEnabled: true,
@@ -30,7 +30,7 @@ const Seed = (() => {
     stickerH: 30,
     stickerShowShop: true,
     printReceiptDefault: true,
-    printStickerDefault: true,
+    printStickerDefault: false, // stickers use the Edge print window: tick only when a label printer is set up
     printKitchenDefault: true,  // second copy for the staff making the drinks
     kitchenMode: 'manual',      // 'manual' = wait until the bill is torn off · 'auto' = print right after (auto-cutter)
     vatPct: 0,
@@ -44,7 +44,7 @@ const Seed = (() => {
     defaultSugar: '100%',
     defaultIce: 'Regular Ice',
     // Promotion: one free topping per drink (the most expensive added topping), between these business days.
-    promo: { enabled: true, name: 'Opening Day Free Topping', from: '', to: '' },
+    promo: { enabled: false, name: 'Opening Day Free Topping', from: '', to: '' },
     discountPresets: [5, 10, 15, 20],
     loyaltyEvery: 10,
     targetFoodCost: 30,

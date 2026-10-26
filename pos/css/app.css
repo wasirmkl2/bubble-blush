@@ -213,6 +213,7 @@ label.check input { width: 18px; height: 18px; accent-color: var(--teal-dd); }
 .q-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
 .q-chip { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 5px 6px 5px 10px; white-space: nowrap; font-size: 12.5px; }
 .q-chip b { font-size: 16px; color: var(--teal-dd); }
+.q-chip.unpaid { background: #FBF0D9; border-color: var(--gold); }
 
 .cart { display: flex; flex-direction: column; background: #fff; border-left: 1px solid var(--line); min-height: 0; }
 .cart-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }

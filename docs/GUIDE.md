@@ -36,7 +36,7 @@ If you switch to the **Browser print window** method instead, the printer driver
 
 ### Cup sticker printer (optional)
 
-Stickers use the Edge print window. Labels are a fixed size, so the length is never a problem.
+Stickers use the Edge print window. Labels are a fixed size, so the length is never a problem. *Cup stickers* is **not ticked** in the payment window unless you tick it (or turn on Settings → *Tick “Print stickers” by default*). Without a label printer, keep it unticked so no print window opens after the bill.
 
 1. In the label printer's *Printing Preferences*, set the label size (e.g. 50 mm × 30 mm, gap 2 mm). Run its calibration (usually by holding the feed button).
 2. **Settings → Cup sticker printer**: set the same size and click **Test print sticker**.
@@ -65,8 +65,11 @@ With the **fast print** shortcut, stickers skip the print window and go to the *
 **During service**
 - **Size is required**: tap Medium/Large (or press **1**/**2**). Premium Brown Sugar is Large only and is picked automatically.
 - **Popping Balls / Crystal Balls**: tap the flavour. The flavour is the topping.
-- **Free topping promotion** (Settings → Promotion): while it runs, the most expensive topping the customer adds is free, **one per drink**. Included toppings (Coconut Jelly in the Paradise drinks, Black Pearls in Brown Sugar Milk Tea) are never charged. The bill shows each free topping and a *Promotional Discount* total. It switches off by itself after the *To* date.
+- **Free topping promotion** (Settings → Promotion): while it runs, the most expensive topping the customer adds is free, **one per drink**. Included toppings (Coconut Jelly in the Paradise drinks, Black Pearls in Brown Sugar Milk Tea) are never charged. The bill shows each free topping and a *Promotional Discount* total. It switches off by itself after the *To* date. The opening offer has ended and the promotion is **off**. Switch it on again in Settings when you run a new offer.
 - Every order prints the **customer bill** first. The POS then waits: **tear off the bill**, then press **Enter** (or *Print kitchen copy*) to print the **kitchen copy**. The kitchen copy has a big order number, each drink with size, sugar, ice, toppings and notes, and no prices. If you skip it, print it later with the gold **👩‍🍳 Print** button in the "Making now" bar. Orders → open order → *Kitchen copy* reprints it. If you ever buy a printer with an auto-cutter, go to Settings → Kitchen copy → *Print automatically*.
+- **Customer still paying?** In the payment window press **👩‍🍳 Kitchen first, pay later**. Only the kitchen copy prints, so the drinks get started, and the cart is free for the next customer. The order waits in the "Making now" bar with a gold **💰 Pay** button, and it stays there until it is paid, even after *Ready*. When the customer pays, press **💰 Pay**, take the payment, and the customer bill prints. You can also take the payment from Orders → open order → *Take payment*. Unpaid orders don't count in sales until they are paid. Reports and *Close the day* show any that are still unpaid.
+- The ticks in the payment window (*Customer bill*, *Kitchen copy*, *Cup stickers*) are remembered, even after the POS restarts.
+- If a bill or kitchen copy can't print directly, the POS asks what to do (**Try again**, *Use print window* or *Skip*). It no longer opens the print window by itself.
 - `F2` Sell · `/` search · `Enter` add · `F12` charge · `Esc` close.
 - Ask for the **phone number** at every order. It builds your customer list and the loyalty count (free drink every 10 cups by default).
 - Press **Ready ✓** in the "Making now" bar when a drink is handed over.

@@ -32,6 +32,7 @@ const Receipt = (() => {
     if (st.bin) ops.push({ t: 'text', s: `BIN: ${st.bin}`, a: 'c', z: 0.9 });
     if (reprint) ops.push({ t: 'tag', s: 'REPRINT' });
     if (order.status === 'void') ops.push({ t: 'tag', s: 'VOID – NOT PAID' });
+    if (order.status === 'unpaid') ops.push({ t: 'tag', s: 'NOT PAID YET' });
     ops.push({ t: 'hr' });
     ops.push({ t: 'text', s: `Order #${order.no}`, a: 'c', b: true, z: 1.7 });
     ops.push({ t: 'text', s: order.orderType, a: 'c', b: true });
@@ -62,8 +63,8 @@ const Receipt = (() => {
     }
     if (order.vat > 0) ops.push({ t: 'row', l: `VAT ${order.vatPct}%${order.vatMode === 'inclusive' ? ' (included)' : ''}`, r: m(order.vat) });
     ops.push({ t: 'row', l: 'TOTAL', r: m(order.total), b: true, z: 1.45 });
-    ops.push({ t: 'row', l: 'Paid by', r: order.payMethod });
-    if (order.payMethod === 'Cash') {
+    if (order.status !== 'unpaid') ops.push({ t: 'row', l: 'Paid by', r: order.payMethod });
+    if (order.status !== 'unpaid' && order.payMethod === 'Cash') {
       ops.push({ t: 'row', l: 'Cash received', r: m(order.received) });
       ops.push({ t: 'row', l: 'Change', r: m(order.change) });
     }
@@ -135,6 +136,7 @@ const Receipt = (() => {
     if (r.vat) ops.push({ t: 'row', l: 'VAT', r: m(r.vat) });
     ops.push({ t: 'row', l: 'NET SALES', r: m(r.net), b: true, z: 1.3 });
     if (r.voids) ops.push({ t: 'row', l: `Voided (${r.voids})`, r: m(r.voidValue) });
+    if (r.unpaid) ops.push({ t: 'row', l: `NOT PAID YET (${r.unpaid})`, r: m(r.unpaidValue), b: true });
     ops.push({ t: 'hr' }, { t: 'text', s: 'Payments', b: true });
     r.payments.forEach((p) => ops.push({ t: 'row', l: `${p.method} (${p.count})`, r: m(p.amount) }));
     ops.push({ t: 'hr' }, { t: 'text', s: 'Cash drawer', b: true });
@@ -411,6 +413,27 @@ const Receipt = (() => {
     </style></head><body><div id="r">${body}</div></body></html>`;
   }
 
+  /* Direct printing failed: ask instead of opening the big print window on its own. */
+  function askFallback(doc, reason) {
+    return new Promise((resolve) => {
+      let choice = 'skip';
+      const md = U.modal({
+        title: `🖨 ${doc} did not print`,
+        body: `<p><b>${U.esc(reason)}</b></p>
+          <p class="muted">Check the printer is switched on, has paper and its USB cable is in, then press <b>Try again</b>.
+          If the print helper is not running, close the POS and open it again from the <b>Bubble Blush POS</b> desktop shortcut.</p>
+          <p class="muted small">Already printed? Press <b>Skip</b> so it does not print twice.</p>`,
+        actions: [
+          { label: 'Skip', left: true },
+          { label: 'Use print window', onClick: () => { choice = 'window'; } },
+          { label: '↻ Try again', cls: 'primary', onClick: () => { choice = 'retry'; } },
+        ],
+        onClose: () => resolve(choice),
+      });
+      setTimeout(() => md.el.querySelector('.modal-actions .primary')?.focus(), 50);
+    });
+  }
+
   /* ---------- public ---------- */
   async function print(ops, doc) {
     const st = Store.settings;
@@ -423,7 +446,9 @@ const Receipt = (() => {
         return { ok: true, direct: true };
       } catch (err) {
         console.warn('Direct print failed', err);
-        U.toast(`Direct print failed (${err.message}). Using the print window instead.`, 'err', 6000);
+        const choice = await askFallback(doc, err.message || String(err));
+        if (choice === 'retry') return print(ops, doc);
+        if (choice !== 'window') return { ok: false, direct: false };
       }
     }
     await Print.run(html(ops), { paperWidthMm: p.mm, autoHeight: true });
