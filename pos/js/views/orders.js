@@ -56,7 +56,7 @@ Views.orders = (() => {
       <tbody>${list.map((o) => `<tr data-id="${o.id}" class="click ${o.status === 'void' ? 'void' : ''}">
         <td><b>#${o.no}</b></td>
         <td>${U.fmtTime(o.at)}</td>
-        <td class="wrap">${o.lines.map((l) => `${l.qty}× ${U.esc(l.name)} <small>(${U.esc(l.sizeName)})</small>`).join(', ')}</td>
+        <td class="wrap">${o.lines.map((l) => `${l.qty}× ${U.esc(l.name)}${l.sizeName ? ` <small>(${U.esc(l.sizeName)})</small>` : ''}${l.parcel ? ' 🥡' : ''}`).join(', ')}</td>
         <td>${U.esc(o.orderType)}</td>
         <td>${U.esc(o.customerName || '')}${o.customerPhone ? `<br><small>${U.esc(o.customerPhone)}</small>` : ''}</td>
         <td>${o.status === 'unpaid' ? '<span class="badge out">Not paid</span>' : U.esc(o.payMethod)}</td>
@@ -72,12 +72,12 @@ Views.orders = (() => {
   function openOrder(o) {
     const lines = o.lines.map((l, i) => `<tr>
       <td>${l.qty}×</td>
-      <td><b>${U.esc(l.name)}</b> (${U.esc(l.sizeName)})
+      <td><b>${U.esc(l.name)}</b>${l.sizeName ? ` (${U.esc(l.sizeName)})` : ' <span class="tag">no drink</span>'}${l.parcel ? ' <span class="tag parcel">🥡 Parcel</span>' : ''}
         <div class="muted small">${[l.sugar && 'Sugar ' + l.sugar, l.ice].filter(Boolean).map(U.esc).join(' · ')}
         ${(l.included || []).length ? '<br>Included: ' + l.included.map(U.esc).join(', ') : ''}
-        ${l.toppings.length ? '<br>' + l.toppings.map((t, k) => `+ ${U.esc(t.name)} ${U.money(t.price)}${l.promo && k === l.promoIndex ? ' <b class="free-tag">FREE</b>' : ''}`).join('<br>') : ''}${l.note ? '<br>✎ ' + U.esc(l.note) : ''}</div></td>
+        ${l.toppings.length ? '<br>' + l.toppings.map((t, k) => `+ ${U.esc(Store.topName(t))} ${U.money(t.price * Store.topQty(t))}${l.promo && k === l.promoIndex ? ' <b class="free-tag">FREE</b>' : ''}`).join('<br>') : ''}${l.note ? '<br>✎ ' + U.esc(l.note) : ''}</div></td>
       <td class="r">${U.money(l.lineTotal)}</td>
-      <td><button class="btn sm ghost" data-sticker="${i}" title="Reprint stickers for this drink">🏷</button></td></tr>`).join('');
+      <td><button class="btn sm ghost" data-sticker="${i}" ${Store.isToppingLine(l) ? 'hidden' : ''} title="Reprint stickers for this drink">🏷</button></td></tr>`).join('');
     const margin = o.total ? (o.total - o.cost) / o.total : 0;
     const md = U.modal({
       title: `Order #${o.no} · ${U.fmtDateTime(o.at)}`,
@@ -94,6 +94,8 @@ Views.orders = (() => {
           ${o.promo ? `<div class="tot-row disc"><span>🎁 ${U.esc(o.promoName || 'Promotion')}</span><span>-${U.money(o.promo)}</span></div>` : ''}
           ${o.discount ? `<div class="tot-row disc"><span>Discount ${o.discountInfo?.reason ? '· ' + U.esc(o.discountInfo.reason) : ''}</span><span>-${U.money(o.discount)}</span></div>` : ''}
           ${o.vat ? `<div class="tot-row"><span>VAT</span><span>${U.money(o.vat)}</span></div>` : ''}
+          ${o.deliveryCharge ? `<div class="tot-row"><span>Delivery charge</span><span>${U.money(o.deliveryCharge)}</span></div>` : ''}
+          ${o.packagingCharge ? `<div class="tot-row"><span>Packaging</span><span>${U.money(o.packagingCharge)}</span></div>` : ''}
           <div class="tot-row grand"><span>Total</span><span>${U.money(o.total)}</span></div>
           ${o.status !== 'unpaid' && o.payMethod === 'Cash' ? `<div class="tot-row muted"><span>Received / change</span><span>${U.money(o.received)} / ${U.money(o.change)}</span></div>` : ''}
           <div class="tot-row muted"><span>Ingredient cost (est.)</span><span>${U.money(o.cost)} · margin ${U.pct(margin)}</span></div>

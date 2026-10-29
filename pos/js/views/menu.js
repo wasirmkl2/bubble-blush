@@ -88,15 +88,16 @@ Views.menu = (() => {
   function drawDrinks(body) {
     const sizes = Store.settings.sizes;
     body.innerHTML = `
-      <div class="row-between mb"><p class="muted">Cost = ingredients + cup, lid, straw &amp; sticker. Green = at or under your target cost %. Tap a drink to edit its price and recipe.</p>
-        <button class="btn primary" id="addItem">+ New drink</button></div>
+      <div class="row-between mb"><p class="muted">Cost = ingredients + cup, lid, straw &amp; sticker. Green = at or under your target cost %. Tap a drink to edit its price and recipe.
+          New drinks get a ✨ NEW badge and their own tab on the Sell screen; untick “New item” when it becomes a regular.</p>
+        <button class="btn primary" id="addItem">+ New drink / item</button></div>
       ${Store.S.categories.map((c) => {
         const items = Store.S.items.filter((i) => i.catId === c.id);
         if (!items.length) return '';
         return `<div class="card flush mb"><div class="card-title" style="--c:${U.color(c.color)}">${U.esc(c.name)}</div>
           <table class="tbl"><thead><tr><th>Drink</th>${sizes.map((s) => `<th class="r">${U.esc(s.name)}<br><small>price · cost · %</small></th>`).join('')}<th>On sale</th></tr></thead>
           <tbody>${items.map((i) => `<tr class="click ${i.active ? '' : 'void'}" data-id="${i.id}">
-            <td><b>${U.esc(i.name)}</b><br><small class="muted">${U.esc(i.desc || '')}</small></td>
+            <td><b>${U.esc(i.name)}</b>${i.isNew ? ' <span class="ic-badge new">✨ NEW</span>' : ''}<br><small class="muted">${U.esc(i.desc || '')}</small></td>
             ${sizes.map((s) => {
               const sz = i.sizes.find((x) => x.sizeId === s.id);
               if (!sz) return '<td class="r muted">—</td>';
@@ -129,7 +130,7 @@ Views.menu = (() => {
     const isNew = !item;
     const sizes = Store.settings.sizes;
     const it = item ? JSON.parse(JSON.stringify(item)) : {
-      id: U.uid(), catId: Store.S.categories[0]?.id || '', name: '', desc: '', active: true,
+      id: U.uid(), catId: Store.S.categories[0]?.id || '', name: '', desc: '', active: true, isNew: true,
       allowSugar: true, allowIce: true, allowToppings: true, sort: Store.S.items.length, sizes: [{ sizeId: sizes[0]?.id, price: 0, recipe: [] }],
     };
     const body = document.createElement('div');
@@ -144,6 +145,7 @@ Views.menu = (() => {
           <small class="muted">Also put its ingredient in the recipe below so stock is deducted.</small></div>
         <div class="span2 checks">
           <label class="check"><input type="checkbox" id="iActive" ${it.active ? 'checked' : ''}> On sale</label>
+          <label class="check" title="Shows a NEW badge and puts it in the ✨ New items tab on the Sell screen"><input type="checkbox" id="iNew" ${it.isNew ? 'checked' : ''}> ✨ New item (show in “New items” tab)</label>
           <label class="check"><input type="checkbox" id="iSugar" ${it.allowSugar ? 'checked' : ''}> Ask sugar level</label>
           <label class="check"><input type="checkbox" id="iIce" ${it.allowIce ? 'checked' : ''}> Ask ice level</label>
           <label class="check"><input type="checkbox" id="iTops" ${it.allowToppings ? 'checked' : ''}> Allow toppings</label>
@@ -206,6 +208,7 @@ Views.menu = (() => {
           it.badge = U.$('#iBadge', body).value.trim();
           it.included = U.$$('[data-inc]', body).filter((x) => x.checked).map((x) => x.dataset.inc);
           it.active = U.$('#iActive', body).checked;
+          it.isNew = U.$('#iNew', body).checked;
           it.allowSugar = U.$('#iSugar', body).checked;
           it.allowIce = U.$('#iIce', body).checked;
           it.allowToppings = U.$('#iTops', body).checked;

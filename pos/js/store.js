@@ -14,6 +14,7 @@ const Store = (() => {
     listeners: [],
   };
 
+  let customerCache = null;
   const byId = (arr) => Object.fromEntries(arr.map((x) => [x.id, x]));
   const sortBy = (arr) => arr.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.name).localeCompare(b.name));
 
@@ -109,7 +110,10 @@ const Store = (() => {
     },
     reload: loadAll,
     onChange(fn) { S.listeners.push(fn); },
-    changed(what) { S.listeners.forEach((fn) => { try { fn(what); } catch (e) { console.error(e); } }); },
+    changed(what) {
+      if (what === 'orders' || what === 'all') customerCache = null;
+      S.listeners.forEach((fn) => { try { fn(what); } catch (e) { console.error(e); } });
+    },
 
     get settings() { return S.settings; },
     async saveSettings(patch) {
@@ -155,20 +159,28 @@ const Store = (() => {
     },
     /* Per-cup discount: the most expensive topping the customer added (included toppings are never charged). */
     linePromo(line, active = api.promoActive()) {
-      if (!active || !(line.toppings || []).length) return { amount: 0, index: -1 };
+      // Only drinks get the free topping (not "extra topping only" lines). One portion is free, even on a double.
+      if (!active || api.isToppingLine(line) || !(line.toppings || []).length) return { amount: 0, index: -1 };
       let index = 0;
       line.toppings.forEach((t, i) => { if (U.n(t.price) > U.n(line.toppings[index].price)) index = i; });
       return { amount: U.n(line.toppings[index].price), index };
     },
     /* Price that hits a target food-cost %, rounded up to the next ৳10. */
     suggestPrice(cost, target = 0.3) { return cost > 0 ? Math.ceil(cost / target / 10) * 10 : 0; },
+    /* A topping on a line can be single (1) or double (2) portion. */
+    topQty(t) { return U.n(t?.qty) >= 2 ? 2 : 1; },
+    topName(t) { return api.topQty(t) > 1 ? `${t.name} ×2 (double)` : t.name; },
+    /* "Extra topping only" line: toppings sold without a drink (e.g. added after the drink was served). */
+    isToppingLine(l) { return l?.kind === 'topping'; },
+    /* Drinks only; extra-topping lines are not cups. */
+    lineCups(l) { return api.isToppingLine(l) ? 0 : U.n(l.qty); },
     lineCost(line) {
-      const item = S.item[line.itemId];
+      const item = api.isToppingLine(line) ? null : S.item[line.itemId];
       const base = item ? api.itemSizeCost(item, line.sizeId) : 0;
-      const tops = U.sum(line.toppings || [], (t) => api.toppingCost(S.topping[t.id], t.flavourId || null));
+      const tops = U.sum(line.toppings || [], (t) => api.toppingCost(S.topping[t.id], t.flavourId || null) * api.topQty(t));
       return (base + tops) * line.qty;
     },
-    lineUnitPrice(line) { return U.n(line.basePrice) + U.sum(line.toppings || [], (t) => t.price); },
+    lineUnitPrice(line) { return U.n(line.basePrice) + U.sum(line.toppings || [], (t) => U.n(t.price) * api.topQty(t)); },
 
     /* Ingredients used by a cart line, as {ingId: qty}. */
     lineUsage(line, into = {}) {
@@ -176,17 +188,22 @@ const Store = (() => {
         if (!r.ingId) return;
         into[r.ingId] = (into[r.ingId] || 0) + U.n(r.qty) * mult;
       });
-      const item = S.item[line.itemId];
-      const sz = item?.sizes.find((x) => x.sizeId === line.sizeId);
-      add(sz?.recipe, line.qty);
-      add(api.size(line.sizeId)?.packaging, line.qty);
-      (line.toppings || []).forEach((t) => add(api.toppingRecipe(S.topping[t.id], t.flavourId || null), line.qty));
+      if (!api.isToppingLine(line)) {
+        const item = S.item[line.itemId];
+        const sz = item?.sizes.find((x) => x.sizeId === line.sizeId);
+        add(sz?.recipe, line.qty);
+        add(api.size(line.sizeId)?.packaging, line.qty);
+      }
+      (line.toppings || []).forEach((t) => add(api.toppingRecipe(S.topping[t.id], t.flavourId || null), line.qty * api.topQty(t)));
       return into;
     },
 
     /* ---------- totals ---------- */
-    totals(lines, discount, promoOn = api.promoActive()) {
+    /* extras: { delivery, packaging } = charges typed in by hand (added after discount, no VAT). */
+    totals(lines, discount, extras = {}, promoOn = api.promoActive()) {
       const st = S.settings;
+      const delivery = Math.max(0, Math.round(U.n(extras?.delivery)));
+      const packaging = Math.max(0, Math.round(U.n(extras?.packaging)));
       const subtotal = U.sum(lines, (l) => api.lineUnitPrice(l) * l.qty);
       const promo = U.sum(lines, (l) => api.linePromo(l, promoOn).amount * l.qty);
       const afterPromo = subtotal - promo;
@@ -203,7 +220,11 @@ const Store = (() => {
         if (st.vatMode === 'inclusive') vat = U.round(afterDisc - afterDisc / (1 + pct / 100));
         else { vat = Math.round(afterDisc * pct / 100); total = afterDisc + vat; }
       }
-      return { subtotal, promo, discount: discAmt, vat, total: Math.round(total), cups: U.sum(lines, (l) => l.qty) };
+      return {
+        subtotal, promo, discount: discAmt, vat, delivery, packaging,
+        total: Math.round(total) + delivery + packaging,
+        cups: U.sum(lines, (l) => api.lineCups(l)),
+      };
     },
 
     /* ---------- orders ---------- */
@@ -213,22 +234,25 @@ const Store = (() => {
     },
 
     /* payLater: the drinks go to the kitchen now, payment is taken later (status 'unpaid'). */
-    async placeOrder({ lines, discount, orderType, customerName, customerPhone, payMethod, received, note, payLater = false }) {
+    async placeOrder({ lines, discount, orderType, customerName, customerPhone, payMethod, received, note, payLater = false, deliveryCharge = 0, packagingCharge = 0 }) {
       const now = new Date();
       const dayKey = api.businessDay(now);
       const promoOn = api.promoActive(dayKey);
-      const t = api.totals(lines, discount, promoOn);
+      const t = api.totals(lines, discount, { delivery: deliveryCharge, packaging: packagingCharge }, promoOn);
       const no = await api.nextOrderNo(dayKey);
       const orderLines = lines.map((l) => {
         const pr = api.linePromo(l, promoOn);
+        const topLine = api.isToppingLine(l);
         return {
-          itemId: l.itemId,
+          kind: topLine ? 'topping' : 'drink',
+          itemId: topLine ? null : l.itemId,
           name: l.name,
-          sizeId: l.sizeId,
-          sizeName: api.sizeLabel(l.sizeId),
-          basePrice: l.basePrice,
-          toppings: (l.toppings || []).map((x) => ({ id: x.id, flavourId: x.flavourId || null, name: x.name, price: x.price })),
-          included: api.includedNames(S.item[l.itemId]),
+          sizeId: topLine ? null : l.sizeId,
+          sizeName: topLine ? '' : api.sizeLabel(l.sizeId),
+          basePrice: topLine ? 0 : l.basePrice,
+          parcel: !!l.parcel,
+          toppings: (l.toppings || []).map((x) => ({ id: x.id, flavourId: x.flavourId || null, name: x.name, price: x.price, qty: api.topQty(x) })),
+          included: topLine ? [] : api.includedNames(S.item[l.itemId]),
           sugar: l.sugar || '',
           ice: l.ice || '',
           note: l.note || '',
@@ -262,6 +286,8 @@ const Store = (() => {
         vat: t.vat,
         vatPct: U.n(S.settings.vatPct),
         vatMode: S.settings.vatMode,
+        deliveryCharge: t.delivery,
+        packagingCharge: t.packaging,
         total: t.total,
         cost: U.round(U.sum(orderLines, (l) => l.cost)),
         payMethod: payLater ? '' : (payMethod || 'Cash'),
@@ -362,6 +388,36 @@ const Store = (() => {
         name: [...orders].reverse().find((o) => o.customerName)?.customerName || '',
         last: orders[orders.length - 1].at,
       };
+    },
+
+    /* Every customer seen on past orders (by phone; name-only customers by name), newest first. */
+    async customers() {
+      if (customerCache) return customerCache;
+      const orders = (await DB.all('orders')).filter((o) => o.status !== 'void' && (o.customerName || o.customerPhone));
+      orders.sort((a, b) => a.at.localeCompare(b.at));
+      const map = new Map();
+      orders.forEach((o) => {
+        const phone = (o.customerPhone || '').replace(/\s+/g, '');
+        const name = (o.customerName || '').trim();
+        const key = phone ? 'p:' + phone : 'n:' + name.toLowerCase();
+        const c = map.get(key) || { phone, name: '', visits: 0, cups: 0, spent: 0, last: '' };
+        c.visits++; c.cups += U.n(o.cups); c.spent += U.n(o.total); c.last = o.at;
+        if (name) c.name = name; // latest name wins
+        map.set(key, c);
+      });
+      customerCache = [...map.values()].sort((a, b) => b.last.localeCompare(a.last));
+      return customerCache;
+    },
+    /* Search customers by part of the name or phone number. */
+    async findCustomers(q, limit = 8) {
+      const s = String(q || '').trim().toLowerCase();
+      if (!s) return [];
+      const digits = s.replace(/\D/g, '');
+      const all = await api.customers();
+      const hit = (c) => (c.name && c.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(s))) ? 2
+        : (c.name && c.name.toLowerCase().includes(s)) || (digits.length >= 3 && c.phone.includes(digits)) ? 1 : 0;
+      return all.map((c) => ({ c, h: hit(c) })).filter((x) => x.h)
+        .sort((a, b) => b.h - a.h || b.c.visits - a.c.visits).slice(0, limit).map((x) => x.c);
     },
 
     /* ---------- stock ---------- */
