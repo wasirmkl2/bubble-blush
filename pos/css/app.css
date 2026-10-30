@@ -321,3 +321,30 @@ label.check input { width: 18px; height: 18px; accent-color: var(--teal-dd); }
 .sum-top { background: var(--mist); border-radius: 8px; padding: 3px 9px; }
 .sum-top.free { background: #FBF0D9; color: var(--warn); font-weight: 700; }
 .free-tag { color: var(--gold); }
+
+/* ---------- new items, topping only, parcel, charges, customer search ---------- */
+.chip.new { border-color: var(--gold); color: #8A6A1F; }
+.chip.new.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+.chip.extra { border-style: dashed; border-color: var(--teal-d); color: var(--teal-dd); font-weight: 700; }
+.ic-badge.new { background: #E0527A; }
+.cart-cust { display: block; width: calc(100% - 28px); margin: 8px 14px 0; text-align: left; border: 1px dashed var(--line); background: #fff; border-radius: 10px; padding: 7px 10px; cursor: pointer; font: inherit; font-size: 13px; color: var(--muted); }
+.cart-cust.set { border-style: solid; border-color: var(--teal); color: var(--ink); background: var(--mist); }
+.cart-cust small { color: var(--muted); }
+.cl.parcel { background: #FFF8EC; }
+.tag.parcel { background: #FBE7C2; color: #8A5A00; }
+.parcel-btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 2px 8px; font-size: 11.5px; cursor: pointer; color: var(--muted); white-space: nowrap; }
+.parcel-btn.on { background: #F4B860; border-color: #F4B860; color: #4A3200; font-weight: 700; }
+.parcel-check { margin-top: 4px; }
+.charges { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 2px 0 8px; font-size: 13px; }
+.charges label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.charges input { width: 80px; padding: 5px 8px; }
+.sum-top { display: inline-flex; align-items: center; gap: 6px; }
+.sum-top.dbl { background: #FBF0D9; font-weight: 700; }
+.dbl-btn { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 0 6px; font-size: 12px; font-weight: 800; cursor: pointer; color: var(--teal-dd); }
+.dbl-btn.on { background: var(--gold); border-color: var(--gold); color: #fff; }
+.cust-fields { position: relative; }
+.cust-sug { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); max-height: 260px; overflow: auto; margin-top: 2px; }
+.cs-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #EDF3F5; background: #fff; padding: 8px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+.cs-item:last-child { border-bottom: 0; }
+.cs-item.on, .cs-item:hover { background: var(--mist); }
+.cs-item small { flex-basis: 100%; }

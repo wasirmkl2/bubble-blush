@@ -43,13 +43,15 @@ const Receipt = (() => {
     ops.push({ t: 'hr' });
     order.lines.forEach((l, i) => {
       if (i) ops.push({ t: 'gap', h: 0.25 });
-      ops.push({ t: 'row', l: `${l.qty} × ${l.name} (${l.sizeName})`, r: m(l.basePrice * l.qty), b: true });
+      if (Store.isToppingLine(l)) ops.push({ t: 'text', s: `${l.qty} × Extra topping (no drink)`, b: true });
+      else ops.push({ t: 'row', l: `${l.qty} × ${l.name} (${l.sizeName})`, r: m(l.basePrice * l.qty), b: true });
+      if (l.parcel) ops.push({ t: 'text', s: '** PARCEL **', b: true, i: 1 });
       if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}`, z: 0.9, i: 1 });
       if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 0.9, i: 1 });
       const inc = Store.lineIncluded(l);
       if (inc.length) ops.push({ t: 'text', s: `Included: ${inc.join(', ')}`, z: 0.9, i: 1 });
       (l.toppings || []).forEach((tp, k) => {
-        ops.push({ t: 'row', l: `+ ${tp.name}`, r: m(tp.price * l.qty), z: 0.9, i: 1 });
+        ops.push({ t: 'row', l: `+ ${Store.topName(tp)}`, r: m(tp.price * Store.topQty(tp) * l.qty), z: 0.9, i: 1 });
         if (l.promo && k === l.promoIndex) ops.push({ t: 'row', l: order.promoName || 'Free topping', r: '-' + m(l.promo * l.qty), z: 0.9, i: 2 });
       });
       if (l.note) ops.push({ t: 'text', s: `Note: ${l.note}`, z: 0.9, i: 1 });
@@ -62,6 +64,8 @@ const Receipt = (() => {
       ops.push({ t: 'row', l: `Discount${d.type === 'pct' ? ` (${d.value}%)` : ''}${d.reason ? ' – ' + d.reason : ''}`, r: '-' + m(order.discount) });
     }
     if (order.vat > 0) ops.push({ t: 'row', l: `VAT ${order.vatPct}%${order.vatMode === 'inclusive' ? ' (included)' : ''}`, r: m(order.vat) });
+    if (order.deliveryCharge > 0) ops.push({ t: 'row', l: 'Delivery charge', r: m(order.deliveryCharge) });
+    if (order.packagingCharge > 0) ops.push({ t: 'row', l: 'Packaging', r: m(order.packagingCharge) });
     ops.push({ t: 'row', l: 'TOTAL', r: m(order.total), b: true, z: 1.45 });
     if (order.status !== 'unpaid') ops.push({ t: 'row', l: 'Paid by', r: order.payMethod });
     if (order.status !== 'unpaid' && order.payMethod === 'Cash') {
@@ -83,16 +87,24 @@ const Receipt = (() => {
     ops.push({ t: 'row', l: U.fmtTime(order.at), r: `${order.cups} cup${order.cups === 1 ? '' : 's'}`, b: true });
     if (order.customerName) ops.push({ t: 'text', s: `Name: ${order.customerName}`, b: true, z: 1.2 });
     ops.push({ t: 'hr' });
+    const parcels = order.lines.filter((l) => l.parcel).length;
+    if (parcels && parcels < order.lines.length) ops.push({ t: 'text', s: `Parcel: ${parcels} of ${order.lines.length} items`, b: true });
     order.lines.forEach((l, i) => {
       if (i) ops.push({ t: 'hr' });
-      ops.push({ t: 'text', s: `${l.qty} × ${l.name}`, b: true, z: 1.3 });
-      ops.push({ t: 'text', s: `Size: ${l.sizeName}`, z: 1.15, i: 1 });
+      if (Store.isToppingLine(l)) {
+        ops.push({ t: 'text', s: `${l.qty} × EXTRA TOPPING`, b: true, z: 1.3 });
+        ops.push({ t: 'text', s: '(no drink, toppings only)', z: 1.0, i: 1 });
+      } else {
+        ops.push({ t: 'text', s: `${l.qty} × ${l.name}`, b: true, z: 1.3 });
+        ops.push({ t: 'text', s: `Size: ${l.sizeName}`, z: 1.15, i: 1 });
+      }
+      if (l.parcel) ops.push({ t: 'tag', s: 'PARCEL' });
       const sl = Store.settings.sugarLabels?.[l.sugar];
       if (l.sugar) ops.push({ t: 'text', s: `Sugar: ${l.sugar}${sl ? ` (${sl})` : ''}`, z: 1.15, i: 1 });
       if (l.ice) ops.push({ t: 'text', s: `Ice: ${l.ice}`, z: 1.15, i: 1 });
       // Included toppings are part of the drink: print them like toppings so they are not missed.
       Store.lineIncluded(l).forEach((n) => ops.push({ t: 'text', s: `+ ${n} (included)`, b: true, z: 1.15, i: 1 }));
-      (l.toppings || []).forEach((tp) => ops.push({ t: 'text', s: `+ ${tp.name}`, b: true, z: 1.15, i: 1 }));
+      (l.toppings || []).forEach((tp) => ops.push({ t: 'text', s: `+ ${Store.topQty(tp) > 1 ? `DOUBLE ${tp.name} (x2)` : tp.name}`, b: true, z: 1.15, i: 1 }));
       if (l.note) ops.push({ t: 'text', s: `NOTE: ${l.note}`, b: true, z: 1.15, i: 1 });
     });
     const note = String(order.note || '').split(' · ').filter((x) => !/^TrxID:/.test(x)).join(' · ');
@@ -134,6 +146,8 @@ const Receipt = (() => {
     if (r.promo) ops.push({ t: 'row', l: `Promotion (${r.promoCups} free toppings)`, r: '-' + m(r.promo) });
     ops.push({ t: 'row', l: 'Discounts', r: '-' + m(r.discount) });
     if (r.vat) ops.push({ t: 'row', l: 'VAT', r: m(r.vat) });
+    if (r.deliveryCharges) ops.push({ t: 'row', l: 'Delivery charges', r: m(r.deliveryCharges) });
+    if (r.packagingCharges) ops.push({ t: 'row', l: 'Packaging charges', r: m(r.packagingCharges) });
     ops.push({ t: 'row', l: 'NET SALES', r: m(r.net), b: true, z: 1.3 });
     if (r.voids) ops.push({ t: 'row', l: `Voided (${r.voids})`, r: m(r.voidValue) });
     if (r.unpaid) ops.push({ t: 'row', l: `NOT PAID YET (${r.unpaid})`, r: m(r.unpaidValue), b: true });

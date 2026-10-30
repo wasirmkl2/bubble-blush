@@ -9,8 +9,16 @@ Views.pos = (() => {
   let printPrefs = null;
 
   function emptyCart() {
-    return { lines: [], discount: null, orderType: null, customerName: '', customerPhone: '', note: '' };
+    return { lines: [], discount: null, orderType: null, customerName: '', customerPhone: '', note: '', deliveryCharge: 0, packagingCharge: 0 };
   }
+  const isDelivery = () => /deliver/i.test(cart.orderType || '');
+  const anyParcel = () => cart.lines.some((l) => l.parcel);
+  /* Delivery charge only counts for Delivery orders; packaging for Delivery or when any item is a parcel. */
+  const cartExtras = () => ({
+    delivery: isDelivery() ? U.n(cart.deliveryCharge) : 0,
+    packaging: isDelivery() || anyParcel() ? U.n(cart.packagingCharge) : 0,
+  });
+  const cartTotals = () => Store.totals(cart.lines, cart.discount, cartExtras());
   function loadCart() {
     try { return { ...emptyCart(), ...JSON.parse(localStorage.getItem(CART_KEY) || '{}') }; } catch { return emptyCart(); }
   }
@@ -26,6 +34,7 @@ Views.pos = (() => {
   }).join(' · ');
   const sugarLabel = (v) => { const l = st().sugarLabels?.[v]; return l ? `${v} · ${l}` : v; };
   const topKey = (t) => `${t.id}|${t.flavourId || ''}`;
+  const topPrice = (t) => U.n(t.price) * Store.topQty(t);
 
   /* ---------- layout ---------- */
   function render(el) {
@@ -71,9 +80,15 @@ Views.pos = (() => {
   function renderCats() {
     const box = U.$('#posCats', root);
     const cats = Store.S.categories.filter((c) => Store.S.items.some((i) => i.catId === c.id));
+    const hasNew = Store.S.items.some((i) => i.isNew && i.sizes.length);
+    if (cat === 'new' && !hasNew) cat = 'all';
     box.innerHTML = [`<button class="chip ${cat === 'all' ? 'on' : ''}" data-c="all">All</button>`]
-      .concat(cats.map((c) => `<button class="chip ${cat === c.id ? 'on' : ''}" data-c="${c.id}" style="--c:${U.color(c.color)}">${U.esc(c.name)}</button>`)).join('');
+      .concat(hasNew ? [`<button class="chip new ${cat === 'new' ? 'on' : ''}" data-c="new">✨ New items</button>`] : [])
+      .concat(cats.map((c) => `<button class="chip ${cat === c.id ? 'on' : ''}" data-c="${c.id}" style="--c:${U.color(c.color)}">${U.esc(c.name)}</button>`))
+      .concat(Store.S.toppings.some((t) => t.active) ? ['<button class="chip extra" data-act="toponly" title="Sell toppings without a drink, e.g. extra topping after the drink was given">➕ Topping only</button>'] : [])
+      .join('');
     box.onclick = (e) => {
+      if (e.target.closest('[data-act="toponly"]')) { openItem(null); return; }
       const b = e.target.closest('[data-c]');
       if (!b) return;
       cat = b.dataset.c;
@@ -85,7 +100,7 @@ Views.pos = (() => {
   function renderGrid() {
     const grid = U.$('#posGrid', root);
     const q = search.trim().toLowerCase();
-    const items = Store.S.items.filter((i) => (cat === 'all' || i.catId === cat) &&
+    const items = Store.S.items.filter((i) => (cat === 'all' || (cat === 'new' ? i.isNew : i.catId === cat)) &&
       (!q || i.name.toLowerCase().includes(q) || (i.desc || '').toLowerCase().includes(q)) && i.sizes.length);
     if (!items.length) {
       grid.innerHTML = `<div class="empty">No drinks found.${Store.S.items.length ? '' : ' Add drinks in <b>Menu &amp; Pricing</b>.'}</div>`;
@@ -96,6 +111,7 @@ Views.pos = (() => {
       const missing = i.active ? Store.missingFor(i, i.sizes[0].sizeId) : [];
       return `<button class="item-card ${i.active ? '' : 'off'}" data-id="${i.id}" style="--c:${U.color(c?.color)}" ${i.active ? '' : 'disabled'}>
         <span class="ic-name">${U.esc(i.name)}</span>
+        ${i.isNew ? '<span class="ic-badge new">✨ NEW</span>' : ''}
         ${i.badge ? `<span class="ic-badge">★ ${U.esc(i.badge)}</span>` : ''}
         <span class="ic-desc">${U.esc(i.desc || (Store.includedNames(i).length ? 'Includes ' + Store.includedNames(i).join(', ') : ''))}</span>
         <span class="ic-price">${priceRange(i)}</span>
@@ -109,31 +125,41 @@ Views.pos = (() => {
   }
 
   /* ---------- item options ---------- */
+  /* item = null → "Topping only": toppings sold without a drink. */
   function openItem(item, editIndex = null) {
+    const topOnly = !item;
     const existing = editIndex !== null ? cart.lines[editIndex] : null;
-    const only = item.sizes.length === 1 ? item.sizes[0] : null; // e.g. Premium Brown Sugar: Large only
-    const line = existing ? JSON.parse(JSON.stringify(existing)) : {
+    const sizes = topOnly ? [] : item.sizes;
+    const only = sizes.length === 1 ? sizes[0] : null; // e.g. Premium Brown Sugar: Large only
+    const line = existing ? JSON.parse(JSON.stringify(existing)) : topOnly ? {
+      kind: 'topping', itemId: null, name: 'Extra topping', sizeId: null, basePrice: 0,
+      sugar: '', ice: '', toppings: [], note: '', qty: 1, parcel: false,
+    } : {
       itemId: item.id, name: item.name, sizeId: only ? only.sizeId : null, basePrice: only ? only.price : 0,
       sugar: item.allowSugar ? st().defaultSugar : '', ice: item.allowIce ? st().defaultIce : '', toppings: [], note: '', qty: 1,
+      parcel: false,
     };
     const tops = Store.S.toppings.filter((t) => t.active);
-    const included = Store.includedNames(item);
-    const promoOn = Store.promoActive();
+    const included = topOnly ? [] : Store.includedNames(item);
+    const promoOn = !topOnly && Store.promoActive();
+    const showTops = topOnly || item.allowToppings;
     const has = (id, fl) => line.toppings.some((x) => topKey(x) === `${id}|${fl || ''}`);
+    const ready = () => (topOnly ? line.toppings.length > 0 : !!line.sizeId);
     const body = document.createElement('div');
     body.className = 'opt';
     body.innerHTML = `
-      ${item.badge ? `<span class="ic-badge big">★ ${U.esc(item.badge)}</span>` : ''}
-      ${item.desc ? `<p class="muted">${U.esc(item.desc)}</p>` : ''}
+      ${topOnly ? '<p class="muted">For toppings without a drink, e.g. the customer wants extra topping after the bill or after the drink was given. Pick the toppings; tap <b>×2</b> for a double portion.</p>' : ''}
+      ${item?.badge ? `<span class="ic-badge big">★ ${U.esc(item.badge)}</span>` : ''}
+      ${item?.desc ? `<p class="muted">${U.esc(item.desc)}</p>` : ''}
       ${included.length ? `<p class="incl">✓ Included: <b>${included.map(U.esc).join(', ')}</b> <small class="muted">(no extra charge)</small></p>` : ''}
-      <div class="opt-group"><label>Size <span class="req" id="sizeReq">${line.sizeId ? '' : '· choose one'}</span></label><div class="size-row">${item.sizes.map((s, k) => {
+      ${topOnly ? '' : `<div class="opt-group"><label>Size <span class="req" id="sizeReq">${line.sizeId ? '' : '· choose one'}</span></label><div class="size-row">${sizes.map((s, k) => {
         const sz = Store.size(s.sizeId);
         return `<button type="button" class="size-btn ${s.sizeId === line.sizeId ? 'on' : ''}" data-size="${s.sizeId}">
-          <b>${U.esc(sz?.name || s.sizeId)}</b>${sz?.volume ? `<small>${U.esc(sz.volume)}</small>` : ''}<span>${U.money(s.price)}</span>${item.sizes.length > 1 ? `<kbd>${k + 1}</kbd>` : ''}</button>`;
-      }).join('')}${only ? `<span class="muted small" style="align-self:center">${U.esc(Store.sizeLabel(only.sizeId))} only</span>` : ''}</div></div>
-      ${item.allowSugar ? `<div class="opt-group"><label>Sugar</label>${U.seg('sugar', st().sugarLevels.map((v) => ({ v, l: sugarLabel(v) })), line.sugar)}</div>` : ''}
-      ${item.allowIce ? `<div class="opt-group"><label>Ice</label>${U.seg('ice', st().iceLevels, line.ice)}</div>` : ''}
-      ${item.allowToppings && tops.length ? `<div class="opt-group"><label>Add toppings ${promoOn ? `<span class="promo-pill">🎁 ${U.esc(st().promo.name)}: 1 topping free per drink</span>` : ''}</label>
+          <b>${U.esc(sz?.name || s.sizeId)}</b>${sz?.volume ? `<small>${U.esc(sz.volume)}</small>` : ''}<span>${U.money(s.price)}</span>${sizes.length > 1 ? `<kbd>${k + 1}</kbd>` : ''}</button>`;
+      }).join('')}${only ? `<span class="muted small" style="align-self:center">${U.esc(Store.sizeLabel(only.sizeId))} only</span>` : ''}</div></div>`}
+      ${item?.allowSugar ? `<div class="opt-group"><label>Sugar</label>${U.seg('sugar', st().sugarLevels.map((v) => ({ v, l: sugarLabel(v) })), line.sugar)}</div>` : ''}
+      ${item?.allowIce ? `<div class="opt-group"><label>Ice</label>${U.seg('ice', st().iceLevels, line.ice)}</div>` : ''}
+      ${showTops && tops.length ? `<div class="opt-group"><label>${topOnly ? 'Toppings' : 'Add toppings'} <span class="req" id="topReq"></span> ${promoOn ? `<span class="promo-pill">🎁 ${U.esc(st().promo.name)}: 1 topping free per drink</span>` : ''}</label>
         <div class="top-row">${tops.filter((t) => !(t.flavours || []).length).map((t) => `
           <button type="button" class="top-btn ${has(t.id) ? 'on' : ''}" data-top="${t.id}">${U.esc(t.name)} <small>+${U.money(t.price)}</small></button>`).join('')}</div>
         ${tops.filter((t) => (t.flavours || []).some((f) => f.active !== false)).map((t) => `
@@ -142,12 +168,13 @@ Views.pos = (() => {
       </div>` : ''}
       <div class="opt-sum" id="optSum"></div>
       <div class="opt-group two">
-        <div><label>Note</label><input type="text" id="optNote" placeholder="e.g. no pearls, extra cold" value="${U.esc(line.note)}"></div>
+        <div><label>Note</label><input type="text" id="optNote" placeholder="${topOnly ? 'e.g. for order #12' : 'e.g. no pearls, extra cold'}" value="${U.esc(line.note)}"></div>
         <div><label>Qty</label><div class="stepper"><button type="button" data-q="-1">−</button><input id="optQty" type="number" min="1" value="${line.qty}"><button type="button" data-q="1">+</button></div></div>
-      </div>`;
+      </div>
+      <label class="check parcel-check"><input type="checkbox" id="optParcel" ${line.parcel ? 'checked' : ''}> 🥡 <b>Parcel</b> <small class="muted">(pack this item to take away; shows on the bill and kitchen copy)</small></label>`;
 
     const md = U.modal({
-      title: item.name,
+      title: topOnly ? '➕ Topping only (no drink)' : item.name,
       body,
       wide: true,
       actions: [
@@ -160,20 +187,35 @@ Views.pos = (() => {
       line.qty = Math.max(1, parseInt(U.$('#optQty', body).value, 10) || 1);
       const pr = Store.linePromo(line, promoOn);
       const net = (Store.lineUnitPrice(line) - pr.amount) * line.qty;
-      U.$('#sizeReq', body).textContent = line.sizeId ? '' : '· choose one';
-      addBtn.disabled = !line.sizeId;
-      addBtn.textContent = !line.sizeId ? 'Choose a size first' : `${existing ? 'Update' : 'Add to order'} — ${U.money(net)}`;
-      U.$('#optSum', body).innerHTML = line.toppings.length ? line.toppings.map((t, i) =>
-        `<span class="sum-top ${i === pr.index && pr.amount ? 'free' : ''}">+ ${U.esc(t.name)} ${i === pr.index && pr.amount ? `<s>${U.money(t.price)}</s> FREE` : U.money(t.price)}</span>`).join('') : '';
+      if (!topOnly) U.$('#sizeReq', body).textContent = line.sizeId ? '' : '· choose one';
+      const tr = U.$('#topReq', body);
+      if (tr) tr.textContent = topOnly && !line.toppings.length ? '· choose at least one' : '';
+      addBtn.disabled = !ready();
+      addBtn.textContent = !ready() ? (topOnly ? 'Choose a topping first' : 'Choose a size first') : `${existing ? 'Update' : 'Add to order'} — ${U.money(net)}`;
+      // Selected toppings: tap ×2 to make it a double portion (double price, double stock).
+      U.$('#optSum', body).innerHTML = line.toppings.map((t, i) => {
+        const free = i === pr.index && pr.amount;
+        const dbl = Store.topQty(t) > 1;
+        return `<span class="sum-top ${free ? 'free' : ''} ${dbl ? 'dbl' : ''}">+ ${U.esc(t.name)}${dbl ? ' ×2' : ''}
+          ${free ? `<s>${U.money(topPrice(t))}</s> ${dbl ? U.money(t.price) : 'FREE'}` : U.money(topPrice(t))}
+          <button type="button" class="dbl-btn ${dbl ? 'on' : ''}" data-dbl="${i}" title="${dbl ? 'Back to single portion' : 'Double portion'}">×2</button></span>`;
+      }).join('');
     };
     const pickSize = (sizeId) => {
-      const sz = item.sizes.find((s) => s.sizeId === sizeId);
+      const sz = sizes.find((s) => s.sizeId === sizeId);
       if (!sz) return;
       line.sizeId = sz.sizeId;
       line.basePrice = sz.price;
       U.$$('.size-btn', body).forEach((b) => b.classList.toggle('on', b.dataset.size === sizeId));
     };
     body.addEventListener('click', (e) => {
+      const db = e.target.closest('[data-dbl]');
+      if (db) {
+        const t = line.toppings[Number(db.dataset.dbl)];
+        if (t) t.qty = Store.topQty(t) > 1 ? 1 : 2;
+        refresh();
+        return;
+      }
       const sb = e.target.closest('[data-size]');
       if (sb) pickSize(sb.dataset.size);
       const tb = e.target.closest('[data-top]');
@@ -183,7 +225,7 @@ Views.pos = (() => {
         const key = `${t.id}|${fl ? fl.id : ''}`;
         const i = line.toppings.findIndex((x) => topKey(x) === key);
         if (i >= 0) line.toppings.splice(i, 1);
-        else line.toppings.push({ id: t.id, flavourId: fl ? fl.id : null, name: fl ? `${t.name} (${fl.name})` : t.name, price: t.price });
+        else line.toppings.push({ id: t.id, flavourId: fl ? fl.id : null, name: fl ? `${t.name} (${fl.name})` : t.name, price: t.price, qty: 1 });
         tb.classList.toggle('on', i < 0);
       }
       const qb = e.target.closest('[data-q]');
@@ -191,35 +233,38 @@ Views.pos = (() => {
       refresh();
     });
     U.$('#optQty', body).addEventListener('input', refresh);
+    U.$('#optParcel', body).addEventListener('change', (e) => { line.parcel = e.target.checked; });
     U.bindSeg(body, 'sugar', (v) => { line.sugar = v; });
     U.bindSeg(body, 'ice', (v) => { line.ice = v; });
     body.addEventListener('keydown', (e) => {
       const typing = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
-      if (!typing && /^[1-9]$/.test(e.key) && item.sizes[Number(e.key) - 1]) {
-        e.preventDefault(); pickSize(item.sizes[Number(e.key) - 1].sizeId); refresh(); return;
+      if (!typing && /^[1-9]$/.test(e.key) && sizes[Number(e.key) - 1]) {
+        e.preventDefault(); pickSize(sizes[Number(e.key) - 1].sizeId); refresh(); return;
       }
-      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'checkbox') {
         e.preventDefault();
-        if (!line.sizeId) { U.toast('Choose a size first', 'err'); return; }
-        commit(); md.close();
+        if (commit()) md.close();
       }
     });
     md.el.addEventListener('keydown', (e) => {
       // size shortcuts also work while the Add button has focus
       if (e.target.closest('.modal-body')) return;
-      if (/^[1-9]$/.test(e.key) && item.sizes[Number(e.key) - 1]) { e.preventDefault(); pickSize(item.sizes[Number(e.key) - 1].sizeId); refresh(); }
+      if (/^[1-9]$/.test(e.key) && sizes[Number(e.key) - 1]) { e.preventDefault(); pickSize(sizes[Number(e.key) - 1].sizeId); refresh(); }
     });
     refresh();
-    setTimeout(() => (line.sizeId ? addBtn : md.el.querySelector('.size-btn'))?.focus(), 30);
+    setTimeout(() => (topOnly ? md.el.querySelector('.top-btn') : line.sizeId ? addBtn : md.el.querySelector('.size-btn'))?.focus(), 30);
 
     function commit() {
       refresh();
-      if (!line.sizeId) { U.toast('Choose a size first', 'err'); return false; }
+      if (!ready()) { U.toast(topOnly ? 'Choose at least one topping' : 'Choose a size first', 'err'); return false; }
       line.note = U.$('#optNote', body).value.trim();
+      line.parcel = U.$('#optParcel', body).checked;
+      if (topOnly) line.name = 'Extra topping';
       if (existing) cart.lines[editIndex] = line;
       else {
         // merge identical lines
-        const key = (l) => JSON.stringify([l.itemId, l.sizeId, l.sugar, l.ice, l.note, l.toppings.map(topKey).sort()]);
+        const key = (l) => JSON.stringify([l.kind || 'drink', l.itemId, l.sizeId, l.sugar, l.ice, l.note, !!l.parcel,
+          l.toppings.map((x) => `${topKey(x)}|${Store.topQty(x)}`).sort()]);
         const same = cart.lines.find((l) => key(l) === key(line));
         if (same) same.qty += line.qty; else cart.lines.push(line);
       }
@@ -232,27 +277,32 @@ Views.pos = (() => {
   /* ---------- cart ---------- */
   function renderCart() {
     const box = U.$('#posCart', root);
-    const t = Store.totals(cart.lines, cart.discount);
+    const custSet = cart.customerName || cart.customerPhone;
     box.innerHTML = `
       <div class="cart-head">
         ${U.seg('otype', st().orderTypes, cart.orderType)}
         <button class="icon-btn" id="cartClear" title="Clear order" ${cart.lines.length ? '' : 'disabled'}>🗑</button>
       </div>
+      <button type="button" class="cart-cust ${custSet ? 'set' : ''}" id="cartCust">👤 ${custSet
+        ? `<b>${U.esc(cart.customerName || 'Customer')}</b> ${U.esc(cart.customerPhone || '')} <small>· change</small>`
+        : 'Add customer <small>(name / phone)</small>'}</button>
       <div class="cart-lines">${cart.lines.length ? cart.lines.map((l, i) => {
+        const topLine = Store.isToppingLine(l);
         const opts = [l.sugar && `Sugar ${l.sugar}`, l.ice].filter(Boolean).join(' · ');
         const pr = Store.linePromo(l);
-        const incl = Store.includedNames(Store.S.item[l.itemId]);
-        return `<div class="cl" data-i="${i}">
+        const incl = topLine ? [] : Store.includedNames(Store.S.item[l.itemId]);
+        return `<div class="cl ${l.parcel ? 'parcel' : ''}" data-i="${i}">
           <div class="cl-main" data-edit="${i}">
-            <div class="cl-name">${U.esc(l.name)} <span class="tag">${U.esc(Store.sizeLabel(l.sizeId))}</span></div>
+            <div class="cl-name">${U.esc(l.name)} ${topLine ? '<span class="tag">no drink</span>' : `<span class="tag">${U.esc(Store.sizeLabel(l.sizeId))}</span>`}${l.parcel ? ' <span class="tag parcel">🥡 Parcel</span>' : ''}</div>
             ${opts ? `<div class="cl-sub">${U.esc(opts)}</div>` : ''}
             ${incl.length ? `<div class="cl-sub">Included: ${incl.map(U.esc).join(', ')}</div>` : ''}
-            ${l.toppings.map((x, k) => `<div class="cl-sub">+ ${U.esc(x.name)} ${U.money(x.price)}${k === pr.index && pr.amount ? ' <b class="free-tag">FREE</b>' : ''}</div>`).join('')}
+            ${l.toppings.map((x, k) => `<div class="cl-sub">+ ${U.esc(Store.topName(x))} ${U.money(topPrice(x))}${k === pr.index && pr.amount ? ' <b class="free-tag">FREE</b>' : ''}</div>`).join('')}
             ${l.note ? `<div class="cl-sub note">✎ ${U.esc(l.note)}</div>` : ''}
           </div>
           <div class="cl-side">
             <div class="cl-price">${pr.amount ? `<s class="muted">${U.money(Store.lineUnitPrice(l) * l.qty)}</s> ` : ''}${U.money((Store.lineUnitPrice(l) - pr.amount) * l.qty)}</div>
             <div class="stepper sm"><button data-dq="-1" data-i="${i}">−</button><span>${l.qty}</span><button data-dq="1" data-i="${i}">+</button></div>
+            <button class="parcel-btn ${l.parcel ? 'on' : ''}" data-parcel="${i}" title="${l.parcel ? 'Parcel: tap to remove' : 'Mark this item as parcel'}">🥡 ${l.parcel ? 'Parcel' : 'Parcel?'}</button>
           </div>
         </div>`;
       }).join('') : `<div class="cart-empty"><img src="assets/icon.png" alt=""><p>Tap a drink to start an order</p></div>`}</div>
@@ -261,15 +311,31 @@ Views.pos = (() => {
           <button class="btn sm ghost" id="cartDisc" ${cart.lines.length ? '' : 'disabled'}>🏷 ${cart.discount ? 'Edit discount' : 'Discount'}</button>
           <button class="btn sm ghost" id="cartNote">✎ ${cart.note ? 'Edit note' : 'Order note'}</button>
         </div>
-        <div class="tot-row"><span>Subtotal (${t.cups} cup${t.cups === 1 ? '' : 's'})</span><span>${U.money(t.subtotal)}</span></div>
-        ${t.promo ? `<div class="tot-row disc"><span>🎁 ${U.esc(st().promo.name)}</span><span>-${U.money(t.promo)}</span></div>` : ''}
-        ${t.discount ? `<div class="tot-row disc"><span>Discount${cart.discount.type === 'pct' ? ` ${cart.discount.value}%` : ''}${cart.discount.reason ? ' · ' + U.esc(cart.discount.reason) : ''}</span><span>-${U.money(t.discount)}</span></div>` : ''}
-        ${t.vat ? `<div class="tot-row"><span>VAT ${st().vatPct}%${st().vatMode === 'inclusive' ? ' (incl.)' : ''}</span><span>${U.money(t.vat)}</span></div>` : ''}
-        <div class="tot-row grand"><span>Total</span><span>${U.money(t.total)}</span></div>
-        <button class="btn primary pay" id="cartPay" ${cart.lines.length ? '' : 'disabled'}>Charge ${U.money(t.total)} <small>F12</small></button>
+        ${isDelivery() || anyParcel() ? `<div class="charges">
+          ${isDelivery() ? `<label>🛵 Delivery charge ৳ <input type="number" min="0" step="1" id="chDelivery" value="${U.n(cart.deliveryCharge) || ''}" placeholder="0"></label>` : ''}
+          <label>📦 Packaging ৳ <input type="number" min="0" step="1" id="chPack" value="${U.n(cart.packagingCharge) || ''}" placeholder="0"></label>
+        </div>` : ''}
+        <div id="cartTotals"></div>
+        <button class="btn primary pay" id="cartPay" ${cart.lines.length ? '' : 'disabled'}></button>
       </div>`;
-    U.bindSeg(box, 'otype', (v) => { cart.orderType = v; saveCart(); });
+    renderTotals();
+    U.bindSeg(box, 'otype', (v) => { cart.orderType = v; saveCart(); renderCart(); });
+    const onCharge = (id, key) => {
+      const inp = U.$(id, box);
+      if (!inp) return;
+      inp.addEventListener('input', () => { cart[key] = Math.max(0, U.n(inp.value)); saveCart(); renderTotals(); });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); });
+    };
+    onCharge('#chDelivery', 'deliveryCharge');
+    onCharge('#chPack', 'packagingCharge');
     box.onclick = async (e) => {
+      const pc = e.target.closest('[data-parcel]');
+      if (pc) {
+        const l = cart.lines[Number(pc.dataset.parcel)];
+        l.parcel = !l.parcel;
+        saveCart(); renderCart();
+        return;
+      }
       const dq = e.target.closest('[data-dq]');
       if (dq) {
         const i = Number(dq.dataset.i);
@@ -282,10 +348,13 @@ Views.pos = (() => {
       const ed = e.target.closest('[data-edit]');
       if (ed) {
         const i = Number(ed.dataset.edit);
-        const item = Store.S.item[cart.lines[i].itemId];
+        const l = cart.lines[i];
+        if (Store.isToppingLine(l)) { openItem(null, i); return; }
+        const item = Store.S.item[l.itemId];
         if (item) openItem(item, i); else U.toast('This drink was removed from the menu', 'err');
       }
     };
+    U.$('#cartCust', box).onclick = openCustomer;
     U.$('#cartClear', box).onclick = async () => {
       if (await U.confirm('Clear this order?', { ok: 'Clear', danger: true })) { resetCart(); }
     };
@@ -300,12 +369,122 @@ Views.pos = (() => {
     U.$('#cartPay', box).onclick = () => openPay();
   }
 
+  /* Totals + Charge button only, so typing a delivery charge doesn't redraw (and unfocus) the cart. */
+  function renderTotals() {
+    const box = U.$('#posCart', root);
+    const t = cartTotals();
+    U.$('#cartTotals', box).innerHTML = `
+      <div class="tot-row"><span>Subtotal (${t.cups} cup${t.cups === 1 ? '' : 's'})</span><span>${U.money(t.subtotal)}</span></div>
+      ${t.promo ? `<div class="tot-row disc"><span>🎁 ${U.esc(st().promo.name)}</span><span>-${U.money(t.promo)}</span></div>` : ''}
+      ${t.discount ? `<div class="tot-row disc"><span>Discount${cart.discount.type === 'pct' ? ` ${cart.discount.value}%` : ''}${cart.discount.reason ? ' · ' + U.esc(cart.discount.reason) : ''}</span><span>-${U.money(t.discount)}</span></div>` : ''}
+      ${t.vat ? `<div class="tot-row"><span>VAT ${st().vatPct}%${st().vatMode === 'inclusive' ? ' (incl.)' : ''}</span><span>${U.money(t.vat)}</span></div>` : ''}
+      ${t.delivery ? `<div class="tot-row"><span>Delivery charge</span><span>${U.money(t.delivery)}</span></div>` : ''}
+      ${t.packaging ? `<div class="tot-row"><span>Packaging</span><span>${U.money(t.packaging)}</span></div>` : ''}
+      <div class="tot-row grand"><span>Total</span><span>${U.money(t.total)}</span></div>`;
+    U.$('#cartPay', box).innerHTML = `Charge ${U.money(t.total)} <small>F12</small>`;
+  }
+
   function resetCart() {
     const keepType = cart.orderType;
     cart = emptyCart();
     cart.orderType = keepType;
     saveCart();
     renderCart();
+  }
+
+  /* ---------- customer: type part of a name or number, pick from past customers ---------- */
+  function customerFieldsHTML(name, phone) {
+    return `<div class="opt-group two cust-fields">
+        <div class="cust-wrap"><label>Customer name (optional)</label><input type="text" id="custName" value="${U.esc(name)}" autocomplete="off" placeholder="Type to search past customers"></div>
+        <div class="cust-wrap"><label>Phone (optional)</label><input type="tel" id="custPhone" value="${U.esc(phone)}" autocomplete="off" placeholder="01XXXXXXXXX"></div>
+        <div class="cust-sug" id="custSug" hidden></div>
+      </div>`;
+  }
+
+  /* Suggestions under the name/phone boxes. onChange(name, phone) runs on every edit or pick. */
+  function bindCustomerPicker(body, onChange) {
+    const nameIn = U.$('#custName', body);
+    const phoneIn = U.$('#custPhone', body);
+    const sug = U.$('#custSug', body);
+    let list = [];
+    let sel = -1;
+    const close = () => { sug.hidden = true; list = []; sel = -1; };
+    const paint = () => {
+      if (!list.length) { close(); return; }
+      sug.hidden = false;
+      sug.innerHTML = list.map((c, i) => `<button type="button" class="cs-item ${i === sel ? 'on' : ''}" data-ci="${i}">
+          <b>${U.esc(c.name || '(no name)')}</b> <span>${U.esc(c.phone || 'no phone')}</span>
+          <small class="muted">${c.visits} visit${c.visits === 1 ? '' : 's'} · last ${U.fmtDay(U.dayKey(new Date(c.last)))}</small></button>`).join('');
+    };
+    const search = U.debounce(async (q) => {
+      const found = await Store.findCustomers(q);
+      // Already exactly this customer: no need to suggest it.
+      list = found.filter((c) => !(c.name === nameIn.value.trim() && c.phone === phoneIn.value.replace(/\s+/g, '')));
+      sel = list.length ? 0 : -1;
+      paint();
+    }, 150);
+    const pick = (c) => {
+      nameIn.value = c.name || nameIn.value;
+      phoneIn.value = c.phone || phoneIn.value;
+      close();
+      onChange(nameIn.value, phoneIn.value, true);
+    };
+    [nameIn, phoneIn].forEach((inp) => {
+      inp.addEventListener('input', () => { onChange(nameIn.value, phoneIn.value, false); search(inp.value); });
+      inp.addEventListener('focus', () => { if (inp.value) search(inp.value); });
+      inp.addEventListener('blur', () => setTimeout(close, 150));
+      inp.addEventListener('keydown', (e) => {
+        if (sug.hidden || !list.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+          paint();
+        } else if (e.key === 'Enter' && sel >= 0) {
+          e.preventDefault(); e.stopPropagation(); pick(list[sel]);
+        } else if (e.key === 'Escape') {
+          e.preventDefault(); e.stopPropagation(); close();
+        }
+      });
+    });
+    sug.addEventListener('mousedown', (e) => {
+      const b = e.target.closest('[data-ci]');
+      if (!b) return;
+      e.preventDefault();
+      pick(list[Number(b.dataset.ci)]);
+    });
+    return { nameIn, phoneIn };
+  }
+
+  function setCartCustomer(name, phone) {
+    cart.customerName = String(name || '').trim();
+    cart.customerPhone = String(phone || '').replace(/\s+/g, '');
+    saveCart();
+  }
+
+  function openCustomer() {
+    const body = document.createElement('div');
+    body.innerHTML = `${customerFieldsHTML(cart.customerName, cart.customerPhone)}<div class="loyal" id="custInfo"></div>`;
+    const md = U.modal({
+      title: '👤 Customer',
+      body,
+      wide: true,
+      actions: [
+        { label: 'Remove', cls: 'danger', left: true, onClick: () => { setCartCustomer('', ''); renderCart(); } },
+        { label: 'Cancel' },
+        { label: 'Save', cls: 'primary', onClick: () => { setCartCustomer(f.nameIn.value, f.phoneIn.value); renderCart(); } },
+      ],
+    });
+    const info = async () => {
+      const s = await Store.customerStats(f.phoneIn.value);
+      U.$('#custInfo', body).innerHTML = !s ? '' : s.visits ? `💙 Returning: ${s.visits} visits · ${s.cups} cups · ${U.money(s.spent)} spent` : '🌱 New customer';
+    };
+    const f = bindCustomerPicker(body, (n, p, picked) => { if (picked) info(); });
+    f.phoneIn.addEventListener('input', U.debounce(info, 300));
+    body.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); md.el.querySelector('.modal-actions .primary').click(); }
+    });
+    info();
+    setTimeout(() => f.nameIn.focus(), 30);
   }
 
   function openDiscount() {
@@ -346,7 +525,8 @@ Views.pos = (() => {
   /* Payment window. `existing` = an order already sent to the kitchen ("Kitchen first, pay later"). */
   function openPay(existing = null, onPaid = null) {
     if (!existing && !cart.lines.length) return;
-    const t = existing ? { total: existing.total, cups: existing.cups } : Store.totals(cart.lines, cart.discount);
+    const t = existing ? { total: existing.total, cups: existing.cups } : cartTotals();
+    const ex = existing ? { delivery: 0, packaging: 0 } : cartExtras();
     let method = st().payMethods[0] || 'Cash';
     const quick = [...new Set([t.total, Math.ceil(t.total / 100) * 100, Math.ceil(t.total / 500) * 500, 1000].filter((v) => v >= t.total))].slice(0, 4);
     const name0 = existing ? existing.customerName : cart.customerName;
@@ -363,10 +543,7 @@ Views.pos = (() => {
         <div class="change" id="changeOut"></div>
       </div>
       <div class="opt-group" id="refBox" hidden><label>Transaction ID (optional)</label><input type="text" id="payRef" placeholder="bKash / Nagad TrxID"></div>
-      <div class="opt-group two">
-        <div><label>Customer name (optional)</label><input type="text" id="custName" value="${U.esc(name0)}"></div>
-        <div><label>Phone (optional)</label><input type="tel" id="custPhone" value="${U.esc(phone0)}" placeholder="01XXXXXXXXX"></div>
-      </div>
+      ${customerFieldsHTML(name0, phone0)}
       <div class="loyal" id="loyal"></div>
       <div class="print-opts">
         <label class="check"><input type="checkbox" id="prReceipt" ${printPrefs.receipt ? 'checked' : ''}> 🧾 Customer bill</label>
@@ -379,6 +556,7 @@ Views.pos = (() => {
       title: existing ? `Payment · Order #${existing.no}` : `Payment · ${cart.orderType}`,
       body,
       wide: true,
+      onClose: () => { if (!existing && root && U.$('#posCart', root)) renderCart(); },
       actions: [
         ...(existing ? [] : [{ label: '👩‍🍳 Kitchen first, pay later', cls: 'gold', left: true, onClick: () => payLater() }]),
         { label: 'Back' },
@@ -402,13 +580,18 @@ Views.pos = (() => {
       const c = e.target.closest('[data-cash]');
       if (c) { cashIn.value = c.dataset.cash; updateChange(); }
     });
-    const phone = U.$('#custPhone', body);
+    // Typed name/phone are kept in the order right away, so pressing Back doesn't lose them.
+    const cust = bindCustomerPicker(body, (n, p, picked) => {
+      if (!existing) setCartCustomer(n, p);
+      if (picked) lookup();
+    });
+    const phone = cust.phoneIn;
     const lookup = U.debounce(async () => {
       const box = U.$('#loyal', body);
       const s = await Store.customerStats(phone.value, existing ? existing.id : null);
       if (!s) { box.innerHTML = ''; return; }
       if (!s.visits) { box.innerHTML = '🌱 New customer — welcome them!'; return; }
-      if (s.name && !U.$('#custName', body).value) U.$('#custName', body).value = s.name;
+      if (s.name && !cust.nameIn.value) { cust.nameIn.value = s.name; if (!existing) setCartCustomer(s.name, phone.value); }
       const every = Number(st().loyaltyEvery) || 0;
       let loyalty = '';
       if (every > 0) {
@@ -445,6 +628,8 @@ Views.pos = (() => {
           lines: cart.lines,
           discount: cart.discount,
           orderType: cart.orderType,
+          deliveryCharge: ex.delivery,
+          packagingCharge: ex.packaging,
           customerName: U.$('#custName', body).value,
           customerPhone: phone.value,
           payMethod: method,
@@ -501,6 +686,8 @@ Views.pos = (() => {
           lines: cart.lines,
           discount: cart.discount,
           orderType: cart.orderType,
+          deliveryCharge: ex.delivery,
+          packagingCharge: ex.packaging,
           customerName: U.$('#custName', body).value,
           customerPhone: phone.value,
           note: cart.note,

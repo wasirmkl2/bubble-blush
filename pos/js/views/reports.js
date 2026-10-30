@@ -43,6 +43,9 @@ Views.reports = (() => {
       unpaid: unpaid.length,
       unpaidValue: U.sum(unpaid, (o) => o.total),
       discountedOrders: paid.filter((o) => o.discount > 0).length,
+      deliveryCharges: U.sum(paid, (o) => o.deliveryCharge || 0),
+      packagingCharges: U.sum(paid, (o) => o.packagingCharge || 0),
+      parcelCups: U.sum(paid, (o) => U.sum(o.lines, (l) => (l.parcel ? Store.lineCups(l) : 0))),
     };
     r.net = r.collected;
     r.revenue = r.collected - r.vat;
@@ -69,6 +72,12 @@ Views.reports = (() => {
 
     const items = {}; const tops = {}; const sizes = {}; const cats = {};
     paid.forEach((o) => o.lines.forEach((l) => {
+      (l.toppings || []).forEach((t) => {
+        const q = l.qty * Store.topQty(t);
+        tops[t.name] = tops[t.name] || { name: t.name, qty: 0, sales: 0 };
+        tops[t.name].qty += q; tops[t.name].sales += t.price * q;
+      });
+      if (Store.isToppingLine(l)) return; // extra toppings without a drink: counted under toppings only
       const k = l.itemId + '|' + l.name;
       items[k] = items[k] || { name: l.name, qty: 0, sales: 0, cost: 0 };
       items[k].qty += l.qty; items[k].sales += l.lineTotal; items[k].cost += l.cost;
@@ -76,10 +85,6 @@ Views.reports = (() => {
       const cat = Store.S.category[Store.S.item[l.itemId]?.catId]?.name || 'Other';
       cats[cat] = cats[cat] || { name: cat, qty: 0, sales: 0 };
       cats[cat].qty += l.qty; cats[cat].sales += l.lineTotal;
-      (l.toppings || []).forEach((t) => {
-        tops[t.name] = tops[t.name] || { name: t.name, qty: 0, sales: 0 };
-        tops[t.name].qty += l.qty; tops[t.name].sales += t.price * l.qty;
-      });
     }));
     r.topItems = Object.values(items).sort((a, b) => b.qty - a.qty || b.sales - a.sales);
     r.toppings = Object.values(tops).sort((a, b) => b.qty - a.qty);
@@ -207,6 +212,9 @@ Views.reports = (() => {
           ${r.promo ? `<div class="tot-row disc"><span>Promotion (${r.promoCups} free toppings)</span><span>-${U.money(r.promo)}</span></div>` : ''}
           <div class="tot-row disc"><span>Discounts (${r.discountedOrders} orders)</span><span>-${U.money(r.discount)}</span></div>
           ${r.vat ? `<div class="tot-row"><span>VAT collected</span><span>${U.money(r.vat)}</span></div>` : ''}
+          ${r.deliveryCharges ? `<div class="tot-row"><span>Delivery charges</span><span>${U.money(r.deliveryCharges)}</span></div>` : ''}
+          ${r.packagingCharges ? `<div class="tot-row"><span>Packaging charges</span><span>${U.money(r.packagingCharges)}</span></div>` : ''}
+          ${r.parcelCups ? `<div class="tot-row muted"><span>Parcel cups</span><span>${r.parcelCups}</span></div>` : ''}
           <div class="tot-row"><span><b>Collected</b></span><span><b>${U.money(r.collected)}</b></span></div>
           <div class="tot-row"><span>Ingredient &amp; packaging cost</span><span>-${U.money(r.cogs)}</span></div>
           <div class="tot-row"><span>Operating expenses</span><span>-${U.money(r.opExpenses)}</span></div>
@@ -229,7 +237,7 @@ Views.reports = (() => {
     U.$('#rCsvO', body).onclick = () => U.download(`orders-${from}_to_${to}.csv`, U.toCSV([
       ['Date', 'Time', 'Order #', 'Status', 'Type', 'Customer', 'Phone', 'Cups', 'Items', 'Subtotal', 'Discount', 'VAT', 'Total', 'Payment', 'Ingredient cost', 'Note'],
       ...data.orders.sort((a, b) => a.at.localeCompare(b.at)).map((o) => [o.dayKey, U.fmtTime(o.at), o.no, o.status, o.orderType, o.customerName, o.customerPhone, o.cups,
-        o.lines.map((l) => `${l.qty}x ${l.name} (${l.sizeName})`).join('; '), o.subtotal, o.discount, o.vat, o.total, o.payMethod, o.cost, o.note || '']),
+        o.lines.map((l) => `${l.qty}x ${l.name}${l.sizeName ? ` (${l.sizeName})` : ''}${l.parcel ? ' [parcel]' : ''}`).join('; '), o.subtotal, o.discount, o.vat, o.total, o.payMethod, o.cost, o.note || '']),
     ]), 'text/csv');
     U.$('#rCsvI', body).onclick = () => U.download(`items-${from}_to_${to}.csv`, U.toCSV([
       ['Drink', 'Cups sold', 'Sales (BDT)', 'Ingredient cost (BDT)', 'Profit (BDT)'],

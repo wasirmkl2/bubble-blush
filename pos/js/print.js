@@ -20,11 +20,12 @@ const Print = (() => {
     const total = order.cups;
     let k = 0;
     order.lines.forEach((l, idx) => {
+      if (Store.isToppingLine(l)) return; // no cup, no sticker
       for (let i = 0; i < l.qty; i++) {
         k++;
         if (onlyLineIndex !== null && idx !== onlyLineIndex) continue;
-        const opts = [l.sizeName, l.sugar ? `Sugar ${l.sugar}` : '', l.ice].filter(Boolean).join(' · ');
-        const tops = [...Store.lineIncluded(l), ...(l.toppings || []).map((t) => t.name)].join(', ');
+        const opts = [l.parcel ? 'PARCEL' : '', l.sizeName, l.sugar ? `Sugar ${l.sugar}` : '', l.ice].filter(Boolean).join(' · ');
+        const tops = [...Store.lineIncluded(l), ...(l.toppings || []).map((t) => Store.topName(t))].join(', ');
         labels.push(`<div class="lb">
           <div class="top"><span class="no">#${order.no}</span><span>${k}/${total} · ${U.fmtTime(order.at)}</span></div>
           <div class="nm">${e(l.name)}</div>
